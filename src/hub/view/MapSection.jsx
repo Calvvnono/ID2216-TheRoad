@@ -1,0 +1,209 @@
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { observer } from 'mobx-react-lite';
+import {
+  Colors,
+  Typography,
+  Spacing,
+  BorderRadius,
+} from '../../shared/theme';
+import HubPresenter from '../presenter/hubPresenter';
+
+/**
+ * Location card grid — pure RN replacement for react-native-maps.
+ * Shows visited locations as tappable cards with visit stats.
+ * Polyline route replaced by numbered sequence badges.
+ *
+ * All data read from HubPresenter; no direct Model imports.
+ */
+function MapSection() {
+  const locations = HubPresenter.aggregatedLocations;
+  const selected = HubPresenter.selectedLocationName;
+
+  return (
+    <View style={styles.wrapper}>
+      <View style={styles.header}>
+        <Text style={styles.heading}>Visited Locations</Text>
+        <Text style={styles.badge}>{locations.length}</Text>
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.grid}
+        showsVerticalScrollIndicator={false}
+      >
+        {locations.map((loc, idx) => {
+          const isSelected = loc.name === selected;
+          return (
+            <TouchableOpacity
+              key={loc.id}
+              activeOpacity={0.7}
+              style={[styles.card, isSelected && styles.cardSelected]}
+              onPress={() => HubPresenter.onMarkerPress(loc.name)}
+            >
+              <View style={styles.cardTop}>
+                <View
+                  style={[
+                    styles.indexCircle,
+                    isSelected && styles.indexCircleSelected,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.indexText,
+                      isSelected && styles.indexTextSelected,
+                    ]}
+                  >
+                    {idx + 1}
+                  </Text>
+                </View>
+                <View style={styles.cardInfo}>
+                  <Text
+                    style={[styles.locName, isSelected && styles.locNameSelected]}
+                    numberOfLines={1}
+                  >
+                    {loc.name}
+                  </Text>
+                  {loc.country ? (
+                    <Text style={styles.locCountry}>{loc.country}</Text>
+                  ) : null}
+                </View>
+              </View>
+
+              <View style={styles.statsRow}>
+                <Pill label="Visits" value={loc.visitCount} color={Colors.primary} />
+                <Pill label="Days" value={loc.totalDays} color={Colors.secondary} />
+                <Pill
+                  label="Spent"
+                  value={`$${loc.totalSpent.toLocaleString()}`}
+                  color={Colors.tertiary}
+                />
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+function Pill({ label, value, color }) {
+  return (
+    <View style={[styles.pill, { borderColor: color }]}>
+      <Text style={[styles.pillValue, { color }]}>{value}</Text>
+      <Text style={styles.pillLabel}>{label}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  heading: {
+    ...Typography.cardTitle,
+    color: Colors.textPrimary,
+  },
+  badge: {
+    backgroundColor: Colors.primarySoft,
+    color: Colors.primary,
+    fontWeight: '700',
+    fontSize: 13,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+    overflow: 'hidden',
+  },
+  scroll: { flex: 1 },
+  grid: {
+    paddingHorizontal: Spacing.sm,
+    paddingBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.borderSubtle,
+  },
+  cardSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(0, 212, 255, 0.06)',
+  },
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  indexCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  indexCircleSelected: {
+    backgroundColor: Colors.primary,
+  },
+  indexText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+  },
+  indexTextSelected: {
+    color: Colors.textInverse,
+  },
+  cardInfo: {
+    flex: 1,
+  },
+  locName: {
+    ...Typography.body,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+  },
+  locNameSelected: {
+    color: Colors.primary,
+  },
+  locCountry: {
+    ...Typography.caption,
+    color: Colors.textTertiary,
+    marginTop: 1,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  pill: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    paddingVertical: Spacing.xs,
+    backgroundColor: Colors.surfaceLight,
+  },
+  pillValue: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  pillLabel: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+    marginTop: 1,
+  },
+});
+
+export default observer(MapSection);
