@@ -1,13 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { Colors } from '../../shared/theme/colors';
 
 /**
  * Pure view — renders preferences card (budget + activity tags).
  * Data comes via props; no direct persistence access.
  */
-export function PreferencePanel({ preferences }) {
+export function PreferencePanel({ preferences, onSaveBudget }) {
   const budgetDisplay = `$${preferences.budgetPerDay}/day`;
+  const [budgetInput, setBudgetInput] = React.useState(
+    String(preferences.budgetPerDay),
+  );
+
+  React.useEffect(() => {
+    setBudgetInput(String(preferences.budgetPerDay));
+  }, [preferences.budgetPerDay]);
 
   return (
     <View style={styles.card}>
@@ -20,7 +27,22 @@ export function PreferencePanel({ preferences }) {
           <Text style={styles.rowLabel}>Budget Limits</Text>
           <Text style={styles.rowValue}>{budgetDisplay}</Text>
         </View>
-        <Text style={styles.chevron}>›</Text>
+        <View style={styles.inlineEditor}>
+          <TextInput
+            value={budgetInput}
+            onChangeText={setBudgetInput}
+            keyboardType="number-pad"
+            style={styles.budgetInput}
+            placeholder="Budget"
+            placeholderTextColor={Colors.textTertiary}
+          />
+          <Pressable
+            style={styles.saveButton}
+            onPress={() => onSaveBudget?.(budgetInput)}
+          >
+            <Text style={styles.saveButtonText}>Save</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.divider} />
@@ -71,9 +93,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.primary,
   },
-  chevron: {
-    fontSize: 22,
-    color: Colors.textTertiary,
+  inlineEditor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  budgetInput: {
+    width: 86,
+    borderWidth: 1,
+    borderColor: Colors.borderDefault,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    fontSize: 13,
+  },
+  saveButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  saveButtonText: {
+    color: Colors.surface,
+    fontSize: 12,
+    fontWeight: '600',
   },
   tagWrap: {
     flexDirection: 'row',

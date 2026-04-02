@@ -34,6 +34,9 @@ class ProfileStoreClass {
   /** @type {string | null} */
   errorMessage = null;
 
+  /** @type {'idle' | 'loading' | 'success' | 'error'} */
+  avatarUploadStatus = 'idle';
+
   constructor() {
     makeAutoObservable(this);
   }
@@ -74,6 +77,34 @@ class ProfileStoreClass {
     } catch (e) {
       runInAction(() => {
         this.errorMessage = e.message ?? 'Failed to save preferences';
+      });
+    }
+  }
+
+  /** Persist only budget change via service. */
+  async updateBudgetPerDay(budgetPerDay) {
+    if (!this.preferences) return;
+    const nextBudget = Number(budgetPerDay);
+    if (!Number.isFinite(nextBudget) || nextBudget <= 0) return;
+
+    await this.updatePreferences({ budgetPerDay: Math.round(nextBudget) });
+  }
+
+  /** Upload avatar image and refresh profile object. */
+  async uploadAvatar(localUri) {
+    this.avatarUploadStatus = 'loading';
+    this.errorMessage = null;
+    try {
+      const nextProfile = await ProfileService.uploadAvatar(localUri);
+      runInAction(() => {
+        this.profile = nextProfile;
+        this.avatarUploadStatus = 'success';
+      });
+    } catch (e) {
+      console.error('uploadAvatar failed:', e);
+      runInAction(() => {
+        this.avatarUploadStatus = 'error';
+        this.errorMessage = e.message ?? 'Failed to upload avatar';
       });
     }
   }

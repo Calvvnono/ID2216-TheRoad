@@ -63,4 +63,19 @@ export const ProfilePresenter = {
   onUpdatePreferences(newPrefs) {
     profileStore.updatePreferences(newPrefs);
   },
+
+  /** Save budget value from view input. */
+  onUpdateBudgetPerDay(budgetPerDay) {
+    profileStore.updateBudgetPerDay(budgetPerDay);
+  },
+
+  /** Upload avatar from local image uri. */
+  onUploadAvatar(localUri) {
+    profileStore.uploadAvatar(localUri);
+  },
+
+  /** @returns {'idle' | 'loading' | 'success' | 'error'} */
+  getAvatarUploadStatus() {
+    return profileStore.avatarUploadStatus;
+  },
 };

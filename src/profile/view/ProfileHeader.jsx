@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
 import { Colors } from '../../shared/theme/colors';
 
 /**
  * Pure view — renders avatar, name, and badge.
  * Data comes via props from ProfileScreen (which gets it from presenter).
  */
-export function ProfileHeader({ profile }) {
+export function ProfileHeader({ profile, onUploadAvatar, isUploading }) {
   const badgeLabel = `${profile.badgeLabel} Level ${profile.badgeLevel}`;
 
   return (
@@ -19,6 +19,11 @@ export function ProfileHeader({ profile }) {
         <View style={styles.badgeDot} />
         <Text style={styles.badgeText}>{badgeLabel}</Text>
       </View>
+      <Pressable style={styles.uploadButton} onPress={onUploadAvatar}>
+        <Text style={styles.uploadButtonText}>
+          {isUploading ? 'Uploading...' : 'Change Avatar'}
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -68,5 +73,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.primary,
+  },
+  uploadButton: {
+    marginTop: 12,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderDefault,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  uploadButtonText: {
+    color: Colors.textPrimary,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

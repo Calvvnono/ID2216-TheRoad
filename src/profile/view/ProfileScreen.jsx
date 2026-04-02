@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { observer } from 'mobx-react-lite';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { ProfilePresenter } from '../presenter/ProfilePresenter';
@@ -32,6 +33,22 @@ export const ProfileScreen = observer(function ProfileScreen() {
 
   const loadStatus = ProfilePresenter.getLoadStatus();
   const errorMessage = ProfilePresenter.getErrorMessage();
+  const avatarUploadStatus = ProfilePresenter.getAvatarUploadStatus();
+
+  const pickAndUploadAvatar = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.7,
+      aspect: [1, 1],
+    });
+
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    ProfilePresenter.onUploadAvatar(result.assets[0].uri);
+  };
 
   return (
     <View style={styles.screen}>
@@ -53,13 +70,20 @@ export const ProfileScreen = observer(function ProfileScreen() {
           showsVerticalScrollIndicator={false}
         >
           {ProfilePresenter.getProfile() && (
-            <ProfileHeader profile={ProfilePresenter.getProfile()} />
+            <ProfileHeader
+              profile={ProfilePresenter.getProfile()}
+              onUploadAvatar={pickAndUploadAvatar}
+              isUploading={avatarUploadStatus === 'loading'}
+            />
           )}
 
           <WishlistCarousel wishlist={ProfilePresenter.getWishlist()} />
 
           {ProfilePresenter.getPreferences() && (
-            <PreferencePanel preferences={ProfilePresenter.getPreferences()} />
+            <PreferencePanel
+              preferences={ProfilePresenter.getPreferences()}
+              onSaveBudget={ProfilePresenter.onUpdateBudgetPerDay}
+            />
           )}
         </ScrollView>
       </StatusOverlay>
