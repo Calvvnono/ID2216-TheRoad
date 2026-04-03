@@ -1,5 +1,7 @@
-import { useEffect } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import {
   Colors,
@@ -9,82 +11,87 @@ import {
   BorderRadius,
 } from '../../shared/theme';
 import HubPresenter from '../presenter/hubPresenter';
-import MapSection from './MapSection';
-import TimeFilter from './TimeFilter';
+import GlobeSection from './GlobeSection';
 import StatsCards from './StatsCards';
 import LocationSheet from './LocationSheet';
 
-/**
- * Hub — primary dashboard screen.
- *
- * Composes MapSection, TimeFilter, StatsCards, and LocationSheet.
- * Handles top-level loading / error / empty states.
- * All data and actions go through HubPresenter only.
- */
+/** Hub dashboard: GlobeSection, stats, location sheet; state via HubPresenter / MobX. */
 function HubScreen() {
-  useEffect(() => {
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+
+  useLayoutEffect(() => {
     HubPresenter.init();
   }, []);
 
   return (
-    <View style={styles.root}>
-      <View style={CommonStyles.screenPadded}>
-        <View style={CommonStyles.appHeader}>
-          <Text style={CommonStyles.appHeaderTitle}>The Road Goes Ever On</Text>
-          <Text style={CommonStyles.appHeaderSubtitle}>
-            All the World's a Road
-          </Text>
-        </View>
-
-        {HubPresenter.isLoading && (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.statusText}>Loading your journeys…</Text>
-          </View>
-        )}
-
-        {HubPresenter.isError && (
-          <View style={styles.centered}>
-            <View style={styles.errorIcon}>
-              <Text style={styles.errorIconText}>!</Text>
+    <GestureHandlerRootView style={styles.gestureRoot}>
+      <SafeAreaProvider>
+        <View style={styles.root}>
+          <View style={CommonStyles.screenPadded}>
+            <View style={CommonStyles.appHeader}>
+              <Text style={CommonStyles.appHeaderTitle}>The Road Goes Ever On</Text>
+              <Text style={CommonStyles.appHeaderSubtitle}>
+                All the World's a Road
+              </Text>
             </View>
-            <Text style={styles.statusText}>
-              {HubPresenter.error || 'Something went wrong.'}
-            </Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={HubPresenter.onRetry}
-            >
-              <Text style={styles.retryText}>Try Again</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
-        {HubPresenter.isSuccess && (
-          <View style={styles.body}>
-            <TimeFilter />
-            <StatsCards />
-
-            {HubPresenter.hasFilteredTrips ? (
-              <MapSection />
-            ) : (
+            {HubPresenter.isAwaitingData && (
               <View style={styles.centered}>
-                <Text style={styles.emptyTitle}>No trips found</Text>
+                <ActivityIndicator size="large" color={Colors.primary} />
+                <Text style={styles.statusText}>Loading your journeys…</Text>
+              </View>
+            )}
+
+            {HubPresenter.isError && (
+              <View style={styles.centered}>
+                <View style={styles.errorIcon}>
+                  <Text style={styles.errorIconText}>!</Text>
+                </View>
                 <Text style={styles.statusText}>
-                  Try adjusting the time filter above.
+                  {HubPresenter.error || 'Something went wrong.'}
                 </Text>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={HubPresenter.onRetry}
+                >
+                  <Text style={styles.retryText}>Try Again</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {HubPresenter.isSuccess && (
+              <View style={styles.body}>
+                <GlobeSection />
+
+                <TouchableOpacity
+                  style={styles.dashboardBtn}
+                  activeOpacity={0.88}
+                  onPress={() => setDashboardOpen((v) => !v)}
+                >
+                  <Text style={styles.dashboardChevron}>
+                    {dashboardOpen ? '⌄' : '⌃'}
+                  </Text>
+                  <Text style={styles.dashboardBtnText}>
+                    {dashboardOpen ? 'Hide dashboard' : 'View Dashboard'}
+                  </Text>
+                </TouchableOpacity>
+
+                {dashboardOpen && <StatsCards />}
               </View>
             )}
           </View>
-        )}
-      </View>
 
-      {HubPresenter.isSuccess && <LocationSheet />}
-    </View>
+          {HubPresenter.isSuccess && <LocationSheet />}
+        </View>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   root: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -104,10 +111,6 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.textSecondary,
     textAlign: 'center',
-  },
-  emptyTitle: {
-    ...Typography.cardTitle,
-    color: Colors.textSecondary,
   },
   errorIcon: {
     width: 56,
@@ -132,6 +135,29 @@ const styles = StyleSheet.create({
   retryText: {
     ...Typography.buttonText,
     color: Colors.primary,
+  },
+  dashboardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xxl,
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: Colors.borderMedium,
+    backgroundColor: Colors.surface,
+  },
+  dashboardChevron: {
+    fontSize: 18,
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+  dashboardBtnText: {
+    ...Typography.buttonText,
+    color: Colors.textPrimary,
+    fontWeight: '600',
   },
 });
 

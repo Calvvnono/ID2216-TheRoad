@@ -11,6 +11,7 @@ import {
   Dimensions,
   PanResponder,
 } from 'react-native';
+import { toJS } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import {
   Colors,
@@ -31,7 +32,8 @@ const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
  * so it works in Expo Go without native worklets.
  */
 function LocationSheet() {
-  const location = HubPresenter.selectedLocation;
+  const raw = HubPresenter.selectedLocation;
+  const location = raw ? toJS(raw) : null;
   const slideAnim = useRef(new Animated.Value(SHEET_HEIGHT)).current;
 
   useEffect(() => {

@@ -1,25 +1,28 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { AsyncStatus } from './asyncStatus';
 import HubService from './hubService';
-import { filterTrips, extractYears, extractMonths } from './tripModel';
+import {
+  tripsTimeBounds,
+  filterTripsByTimeEnd,
+  tripRouteCoordinates,
+} from './tripModel';
 import { aggregateLocations, computeStats } from './locationModel';
 
 /**
  * Hub application state (MobX observable).
  *
- * Holds UI state (filters, selection, async status).
- * All domain computation is delegated to Model pure functions
- * (tripModel / locationModel).
+ * Time filter: single continuous slider 0..1 → cutoff between first trip start
+ * and last trip end (see filteredTrips).
  */
 class HubStore {
   /** @type {import('./tripModel').Trip[]} */
   trips = [];
 
-  /** @type {number | null} */
-  selectedYear = null;
-
-  /** @type {number | null} - 0-indexed (0 = Jan) */
-  selectedMonth = null;
+  /**
+   * 0 = earliest moment only, 1 = full timeline (default after load).
+   * @type {number}
+   */
+  timeSliderNormalized = 1;
 
   /** @type {string | null} */
   selectedLocationName = null;
@@ -34,23 +37,15 @@ class HubStore {
     makeAutoObservable(this);
   }
 
-  // ── Computed (delegates to Model) ─────────────────────
-
-  get availableYears() {
-    return extractYears(this.trips);
-  }
-
-  get availableMonths() {
-    const base = this.selectedYear
-      ? this.trips.filter(
-          (t) => new Date(t.startDate).getFullYear() === this.selectedYear,
-        )
-      : this.trips;
-    return extractMonths(base);
+  /** Cutoff timestamp (ms) derived from slider position and trip time bounds. */
+  get timeSliderCutoffMs() {
+    const { minMs, maxMs } = tripsTimeBounds(this.trips);
+    if (this.trips.length === 0 || maxMs <= minMs) return maxMs;
+    return minMs + this.timeSliderNormalized * (maxMs - minMs);
   }
 
   get filteredTrips() {
-    return filterTrips(this.trips, this.selectedYear, this.selectedMonth);
+    return filterTripsByTimeEnd(this.trips, this.timeSliderCutoffMs);
   }
 
   /** @returns {import('./locationModel').AggregatedLocation[]} */
@@ -72,15 +67,23 @@ class HubStore {
     return computeStats(this.filteredTrips);
   }
 
+  /** Chronological route points for Polyline (filtered trips). */
+  get routeCoordinates() {
+    return tripRouteCoordinates(this.filteredTrips);
+  }
+
   // ── Actions ───────────────────────────────────────────
 
   async loadTrips() {
-    this.loadStatus = AsyncStatus.LOADING;
-    this.error = null;
+    runInAction(() => {
+      this.loadStatus = AsyncStatus.LOADING;
+      this.error = null;
+    });
     try {
       const data = await HubService.fetchTrips('mock-user');
       runInAction(() => {
         this.trips = data;
+        this.timeSliderNormalized = 1;
         this.loadStatus = AsyncStatus.SUCCESS;
       });
     } catch (err) {
@@ -91,14 +94,9 @@ class HubStore {
     }
   }
 
-  setYear(year) {
-    this.selectedYear = year;
-    this.selectedMonth = null;
-    this.selectedLocationName = null;
-  }
-
-  setMonth(month) {
-    this.selectedMonth = month;
+  setTimeSliderNormalized(value) {
+    const v = Number(value);
+    this.timeSliderNormalized = Math.min(1, Math.max(0, v));
     this.selectedLocationName = null;
   }
 
@@ -112,6 +110,12 @@ class HubStore {
 
   retry() {
     this.loadTrips();
+  }
+
+  ensureLoaded() {
+    if (this.loadStatus === AsyncStatus.IDLE) {
+      this.loadTrips();
+    }
   }
 }
 

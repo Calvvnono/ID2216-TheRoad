@@ -4,49 +4,52 @@ import { AsyncStatus } from '../model/asyncStatus';
 /**
  * Hub presenter — the ONLY bridge between View and Model.
  *
- * Exposes:
- *  - data getters (View reads these, never touches hubStore directly)
- *  - action methods (View calls these on user interaction)
- *
- * MobX reactivity still works: observer() Views that access these
- * getters will re-render when the underlying hubStore observables change.
+ * Views read data exclusively through these getters and dispatch
+ * user actions through the methods below. No View may import
+ * hubStore or any Model module directly.
  */
 const HubPresenter = {
 
   // ── Data getters (View reads) ─────────────────────────
 
-  get loadStatus()          { return hubStore.loadStatus; },
-  get isLoading()           { return hubStore.loadStatus === AsyncStatus.LOADING; },
+  get isAwaitingData() {
+    return (
+      hubStore.loadStatus === AsyncStatus.IDLE ||
+      hubStore.loadStatus === AsyncStatus.LOADING
+    );
+  },
   get isError()             { return hubStore.loadStatus === AsyncStatus.ERROR; },
   get isSuccess()           { return hubStore.loadStatus === AsyncStatus.SUCCESS; },
   get error()               { return hubStore.error; },
 
-  get filteredTrips()       { return hubStore.filteredTrips; },
-  get hasFilteredTrips()    { return hubStore.filteredTrips.length > 0; },
+  get routeCoordinates()    { return hubStore.routeCoordinates; },
   get aggregatedLocations() { return hubStore.aggregatedLocations; },
   get selectedLocationName(){ return hubStore.selectedLocationName; },
   get selectedLocation()    { return hubStore.selectedLocation; },
   get stats()               { return hubStore.stats; },
 
-  get availableYears()      { return hubStore.availableYears; },
-  get availableMonths()     { return hubStore.availableMonths; },
-  get selectedYear()        { return hubStore.selectedYear; },
-  get selectedMonth()       { return hubStore.selectedMonth; },
+  get timeSliderNormalized() { return hubStore.timeSliderNormalized; },
+
+  /** Cutoff instant formatted for display, e.g. "Oct 2024". */
+  get timeSliderDateLabel() {
+    const cutoff = hubStore.timeSliderCutoffMs;
+    if (!hubStore.filteredTrips.length && hubStore.loadStatus === AsyncStatus.SUCCESS) {
+      return '—';
+    }
+    return new Date(cutoff).toLocaleDateString('en-US', {
+      month: 'short',
+      year: 'numeric',
+    });
+  },
 
   // ── Actions (View calls) ──────────────────────────────
 
   init() {
-    if (hubStore.loadStatus === AsyncStatus.IDLE) {
-      hubStore.loadTrips();
-    }
+    hubStore.ensureLoaded();
   },
 
-  onYearChange(year) {
-    hubStore.setYear(year);
-  },
-
-  onMonthChange(month) {
-    hubStore.setMonth(month);
+  onTimeSliderChange(value) {
+    hubStore.setTimeSliderNormalized(value);
   },
 
   onMarkerPress(locationName) {

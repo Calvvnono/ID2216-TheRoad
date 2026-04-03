@@ -1,9 +1,10 @@
-import { tripDays, tripTotalExpense } from './tripModel';
+import { tripDays, tripTotalExpense, copyCoordinates } from './tripModel';
 
 /**
  * @typedef {Object} AggregatedLocation
  * @property {string}       id
- * @property {string}       name         - city / region
+ * @property {string}       name         - city / region (same as trip.destination)
+ * @property {string}       nameEn       - English label for map (destinationEn or destination)
  * @property {string}       country
  * @property {import('./tripModel').Coordinates} coordinates
  * @property {string[]}     tripIds
@@ -32,11 +33,15 @@ export function aggregateLocations(trips) {
   for (const trip of trips) {
     const key = trip.destination;
     if (!map.has(key)) {
+      const nameEn =
+        (trip.destinationEn && String(trip.destinationEn).trim()) ||
+        trip.destination;
       map.set(key, {
         id: key,
         name: trip.destination,
+        nameEn,
         country: trip.country,
-        coordinates: trip.coordinates,
+        coordinates: copyCoordinates(trip.coordinates),
         tripIds: [],
         visitCount: 0,
         totalSpent: 0,

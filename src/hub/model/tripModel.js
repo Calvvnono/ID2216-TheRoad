@@ -14,7 +14,8 @@
 /**
  * @typedef {Object} Trip
  * @property {string}       id
- * @property {string}       destination  - city / region name
+ * @property {string}       destination  - city / region name (display / grouping key)
+ * @property {string}       [destinationEn] - English label for map UI; falls back to destination
  * @property {string}       country
  * @property {string}       startDate    - ISO 8601 date string "YYYY-MM-DD"
  * @property {string}       endDate      - ISO 8601 date string "YYYY-MM-DD"
@@ -25,6 +26,18 @@
  */
 
 // ── Trip domain helpers ─────────────────────────────────
+
+/**
+ * Plain { latitude, longitude } — avoids passing MobX observables to native/third-party code.
+ * @param {Coordinates} c
+ * @returns {Coordinates}
+ */
+export function copyCoordinates(c) {
+  return {
+    latitude: Number(c.latitude),
+    longitude: Number(c.longitude),
+  };
+}
 
 /**
  * Number of calendar days between two ISO date strings (inclusive).
@@ -56,39 +69,34 @@ export function tripTotalExpense(trip) {
 }
 
 /**
- * Filter trips by optional year and month.
+ * Earliest trip start and latest trip end (ms), for continuous time scrubber.
  * @param {Trip[]} trips
- * @param {number | null} year
- * @param {number | null} month - 0-indexed (0 = Jan)
+ * @returns {{ minMs: number, maxMs: number }}
+ */
+export function tripsTimeBounds(trips) {
+  if (!trips.length) {
+    const n = Date.now();
+    return { minMs: n, maxMs: n };
+  }
+  let minMs = Infinity;
+  let maxMs = -Infinity;
+  for (const t of trips) {
+    const a = new Date(t.startDate).getTime();
+    const b = new Date(t.endDate).getTime();
+    minMs = Math.min(minMs, a);
+    maxMs = Math.max(maxMs, b);
+  }
+  return { minMs, maxMs };
+}
+
+/**
+ * Trips whose journey has started on or before the cutoff instant.
+ * @param {Trip[]} trips
+ * @param {number} cutoffMs
  * @returns {Trip[]}
  */
-export function filterTrips(trips, year, month) {
-  return trips.filter((trip) => {
-    const d = new Date(trip.startDate);
-    if (year !== null && d.getFullYear() !== year) return false;
-    if (month !== null && d.getMonth() !== month) return false;
-    return true;
-  });
-}
-
-/**
- * Extract distinct years from trips, sorted ascending.
- * @param {Trip[]} trips
- * @returns {number[]}
- */
-export function extractYears(trips) {
-  const s = new Set(trips.map((t) => new Date(t.startDate).getFullYear()));
-  return [...s].sort((a, b) => a - b);
-}
-
-/**
- * Extract distinct months (0-11) from trips, sorted ascending.
- * @param {Trip[]} trips
- * @returns {number[]}
- */
-export function extractMonths(trips) {
-  const s = new Set(trips.map((t) => new Date(t.startDate).getMonth()));
-  return [...s].sort((a, b) => a - b);
+export function filterTripsByTimeEnd(trips, cutoffMs) {
+  return trips.filter((t) => new Date(t.startDate).getTime() <= cutoffMs);
 }
 
 /**
@@ -100,5 +108,5 @@ export function tripRouteCoordinates(trips) {
   return trips
     .slice()
     .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
-    .map((t) => t.coordinates);
+    .map((t) => copyCoordinates(t.coordinates));
 }
