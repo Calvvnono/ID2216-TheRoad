@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, Image, Pressable, StyleSheet, Animated } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../shared/theme/colors';
 
@@ -18,56 +18,100 @@ function StatBox({ label, value }) {
 }
 
 export function JourneyCard({ journey, onPress }) {
+  const cardScale = useRef(new Animated.Value(1)).current;
+  const cardOpacity = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(cardScale, {
+          toValue: 0.98,
+          duration: 80,
+          useNativeDriver: true,
+        }),
+        Animated.timing(cardOpacity, {
+          toValue: 0.9,
+          duration: 80,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.parallel([
+        Animated.timing(cardScale, {
+          toValue: 1,
+          duration: 90,
+          useNativeDriver: true,
+        }),
+        Animated.timing(cardOpacity, {
+          toValue: 1,
+          duration: 90,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      onPress?.(journey.id);
+    });
+  };
+
   return (
-    <Pressable style={styles.card} onPress={() => onPress?.(journey.id)}>
-      <Image source={{ uri: journey.imageUrl }} style={styles.backgroundImage} />
-      <View style={styles.overlay} />
+    <Pressable onPress={handlePress}>
+      <Animated.View
+        style={[
+          styles.card,
+          {
+            transform: [{ scale: cardScale }],
+            opacity: cardOpacity,
+          },
+        ]}
+      >
+        <Image source={{ uri: journey.imageUrl }} style={styles.backgroundImage} />
+        <View style={styles.overlay} />
 
-      <View style={styles.content}>
-        <View style={styles.topRow}>
-          <View>
-            <Text style={styles.destination}>{journey.destination}</Text>
-            <Text style={styles.country}>{journey.country}</Text>
+        <View style={styles.content}>
+          <View style={styles.topRow}>
+            <View>
+              <Text style={styles.destination}>{journey.destination}</Text>
+              <Text style={styles.country}>{journey.country}</Text>
+            </View>
+
+            <View style={styles.iconBubble}>
+              <MaterialCommunityIcons
+                name="airplane"
+                size={18}
+                color={Colors.primary}
+              />
+            </View>
           </View>
 
-          <View style={styles.iconBubble}>
-            <MaterialCommunityIcons
-              name="airplane"
-              size={18}
-              color={Colors.primary}
-            />
+          <View style={styles.metaRow}>
+            <View>
+              <Text style={styles.metaLabel}>TRAVEL DATES</Text>
+              <Text style={styles.metaValue}>{journey.travelDates}</Text>
+            </View>
+            <View>
+              <Text style={styles.metaLabel}>DURATION</Text>
+              <Text style={styles.metaValue}>{journey.durationLabel}</Text>
+            </View>
+          </View>
+
+          <View style={styles.statsRow}>
+            <StatBox label="Spent" value={journey.spentLabel} />
+            <StatBox label="Photos" value={journey.photos} />
+            <StatBox label="Places" value={journey.places} />
+          </View>
+
+          <View style={styles.barsRow}>
+            {BAR_PATTERN.map((height, index) => (
+              <View
+                key={`${journey.id}-${index}`}
+                style={[
+                  styles.bar,
+                  { height, opacity: index % 3 === 0 ? 0.7 : 0.45 },
+                ]}
+              />
+            ))}
           </View>
         </View>
-
-        <View style={styles.metaRow}>
-          <View>
-            <Text style={styles.metaLabel}>TRAVEL DATES</Text>
-            <Text style={styles.metaValue}>{journey.travelDates}</Text>
-          </View>
-          <View>
-            <Text style={styles.metaLabel}>DURATION</Text>
-            <Text style={styles.metaValue}>{journey.durationLabel}</Text>
-          </View>
-        </View>
-
-        <View style={styles.statsRow}>
-          <StatBox label="Spent" value={journey.spentLabel} />
-          <StatBox label="Photos" value={journey.photos} />
-          <StatBox label="Places" value={journey.places} />
-        </View>
-
-        <View style={styles.barsRow}>
-          {BAR_PATTERN.map((height, index) => (
-            <View
-              key={`${journey.id}-${index}`}
-              style={[
-                styles.bar,
-                { height, opacity: index % 3 === 0 ? 0.7 : 0.45 },
-              ]}
-            />
-          ))}
-        </View>
-      </View>
+      </Animated.View>
     </Pressable>
   );
 }

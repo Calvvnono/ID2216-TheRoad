@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   Image,
   Pressable,
+  Animated,
 } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -40,23 +41,57 @@ function DailyExpenseBars({ values }) {
 
 export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const router = useRouter();
+  const entryAnim = useRef(new Animated.Value(0)).current;
   const params = useLocalSearchParams();
-  const journeyId = Array.isArray(params.journeyId)
+  const journeyIdParam = Array.isArray(params.journeyId)
     ? params.journeyId[0]
     : params.journeyId;
+  const journeyId = typeof journeyIdParam === 'string' ? journeyIdParam : '';
 
   useEffect(() => {
     JourneyDetailPresenter.init();
   }, []);
 
+  useEffect(() => {
+    entryAnim.setValue(0);
+    Animated.timing(entryAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [entryAnim, journeyId]);
+
+  const handleBack = useCallback(() => {
+    if (typeof router.canGoBack === 'function' && router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/journeys');
+  }, [router]);
+
+  const detailAnimatedStyle = {
+    opacity: entryAnim,
+    transform: [
+      {
+        translateY: entryAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [12, 0],
+        }),
+      },
+    ],
+  };
+
   const loadStatus = JourneyDetailPresenter.getLoadStatus();
   const errorMessage = JourneyDetailPresenter.getErrorMessage();
   const journey = JourneyDetailPresenter.getJourneyById(journeyId);
+  const visitedLocations = journey?.visitedLocations || [];
+  const dailyExpenses = journey?.dailyExpenses || [];
+  const photoMemories = journey?.photoMemories || [];
 
   return (
     <View style={styles.screen}>
       <View style={styles.topRow}>
-        <Pressable style={styles.iconBtn} onPress={() => router.back()}>
+        <Pressable style={styles.iconBtn} onPress={handleBack}>
           <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
         </Pressable>
 
@@ -76,62 +111,67 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
         onRetry={() => JourneyDetailPresenter.reload()}
       >
         {journey ? (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.heroWrap}>
-              <Image source={{ uri: journey.detailHeroImage }} style={styles.heroImage} />
-              <View style={styles.heroOverlay} />
-              <View style={styles.playBtn}>
-                <Ionicons name="play" size={26} color={Colors.textPrimary} />
+          <Animated.View style={[styles.detailContainer, detailAnimatedStyle]}>
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.content}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.heroWrap}>
+                <Image source={{ uri: journey.detailHeroImage }} style={styles.heroImage} />
+                <View style={styles.heroOverlay} />
+                <View style={styles.playBtn}>
+                  <Ionicons name="play" size={26} color={Colors.textPrimary} />
+                </View>
               </View>
-            </View>
 
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionTitleRow}>
-                <MaterialCommunityIcons
-                  name="map-marker-outline"
-                  size={18}
-                  color={Colors.primary}
-                />
-                <Text style={styles.sectionTitle}>Visited Locations</Text>
-              </View>
-              <View style={styles.tagRow}>
-                {journey.visitedLocations.map((place, index) => (
-                  <View key={`${place}-${index}`} style={styles.tagChip}>
-                    <Text style={styles.tagText}>{`${index + 1}. ${place}`}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Daily Expenses</Text>
-              <DailyExpenseBars values={journey.dailyExpenses} />
-            </View>
-
-            <View style={styles.memoriesSection}>
-              <Text style={styles.sectionTitle}>Photo Memories</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.memoryRow}
-              >
-                {journey.photoMemories.map((url, index) => (
-                  <Image
-                    key={`${journey.id}-memory-${index}`}
-                    source={{ uri: url }}
-                    style={styles.memoryImage}
+              <View style={styles.sectionCard}>
+                <View style={styles.sectionTitleRow}>
+                  <MaterialCommunityIcons
+                    name="map-marker-outline"
+                    size={18}
+                    color={Colors.primary}
                   />
-                ))}
-              </ScrollView>
-            </View>
-          </ScrollView>
+                  <Text style={styles.sectionTitle}>Visited Locations</Text>
+                </View>
+                <View style={styles.tagRow}>
+                  {visitedLocations.map((place, index) => (
+                    <View key={`${place}-${index}`} style={styles.tagChip}>
+                      <Text style={styles.tagText}>{`${index + 1}. ${place}`}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Daily Expenses</Text>
+                <DailyExpenseBars values={dailyExpenses} />
+              </View>
+
+              <View style={styles.memoriesSection}>
+                <Text style={styles.sectionTitle}>Photo Memories</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.memoryRow}
+                >
+                  {photoMemories.map((url, index) => (
+                    <Image
+                      key={`${journey.id}-memory-${index}`}
+                      source={{ uri: url }}
+                      style={styles.memoryImage}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            </ScrollView>
+          </Animated.View>
         ) : (
           <View style={styles.notFoundWrap}>
             <Text style={styles.notFoundText}>Journey not found.</Text>
+            <Pressable style={styles.notFoundButton} onPress={handleBack}>
+              <Text style={styles.notFoundButtonText}>Back to Journeys</Text>
+            </Pressable>
           </View>
         )}
       </StatusOverlay>
@@ -175,6 +215,9 @@ const styles = StyleSheet.create({
     marginTop: 1,
     fontSize: 15,
     color: Colors.textSecondary,
+  },
+  detailContainer: {
+    flex: 1,
   },
   scroll: {
     flex: 1,
@@ -303,5 +346,17 @@ const styles = StyleSheet.create({
   notFoundText: {
     fontSize: 15,
     color: Colors.textSecondary,
+  },
+  notFoundButton: {
+    marginTop: 14,
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  notFoundButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textInverse,
   },
 });

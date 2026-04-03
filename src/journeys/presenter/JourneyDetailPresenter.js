@@ -19,7 +19,8 @@ export const JourneyDetailPresenter = {
 
   getJourneyById(journeyId) {
     if (!journeyId) return null;
-    const raw = journeysStore.journeys.find((item) => item.id === journeyId);
+    const targetId = String(journeyId);
+    const raw = journeysStore.journeys.find((item) => String(item.id) === targetId);
     if (!raw) return null;
 
     return {
