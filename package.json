@@ -1,26 +1,35 @@
 {
   "main": "expo-router/entry",
   "version": "1.0.0",
-    "scripts": {
-	"dev": "expo start",
-	"dev_clear": "expo start --clear"
+  "scripts": {
+    "dev": "expo start",
+    "dev_clear": "expo start --clear"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/slider": "5.1.2",
     "expo": "~55.0.4",
+    "expo-constants": "~55.0.11",
+    "expo-image-picker": "~55.0.16",
+    "expo-linking": "~55.0.11",
     "expo-router": "~55.0.2",
-    "firebase": "latest",
+    "firebase": "~12.11.0",
     "mobx": "~6.15.0",
     "mobx-react-lite": "~4.1.1",
     "react": "~19.2.0",
+    "react-dom": "19.2.0",
     "react-native": "~0.83.2",
-    "react-native-web": "~0.21.0",
+    "react-native-gesture-handler": "~2.30.0",
+    "react-native-maps": "1.27.2",
     "react-native-safe-area-context": "~5.6.0",
-    "react-native-screens": "~4.23.0" 
+    "react-native-screens": "~4.23.0",
+    "react-native-web": "~0.21.0"
   },
-    "devDependencies": {
-	"@babel/core": "~7.28.5",
-        "babel-preset-expo": "~55.0.10",
-	"babel-plugin-module-resolver": "~5.0.2"
-    },
+  "devDependencies": {
+    "@babel/core": "~7.28.5",
+    "babel-preset-expo": "~55.0.10",
+    "babel-plugin-module-resolver": "~5.0.2"
+  },
   "private": true
 }
