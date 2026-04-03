@@ -33,6 +33,10 @@ export default function RootLayout() {
         name="profile"
         options={{ title: "Profile", tabBarLabel: "Profile" }}
       />
+      <Tabs.Screen
+        name="journeyDetail"
+        options={{ href: null }}
+      />
     </Tabs>
   );
 }
