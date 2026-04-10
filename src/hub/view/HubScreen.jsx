@@ -1,7 +1,6 @@
 import { useLayoutEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import {
   Colors,
@@ -25,7 +24,6 @@ function HubScreen() {
 
   return (
     <GestureHandlerRootView style={styles.gestureRoot}>
-      <SafeAreaProvider>
         <View style={styles.root}>
           <View style={CommonStyles.screenPadded}>
             <View style={CommonStyles.appHeader}>
@@ -83,7 +81,6 @@ function HubScreen() {
 
           {HubPresenter.isSuccess && <LocationSheet />}
         </View>
-      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

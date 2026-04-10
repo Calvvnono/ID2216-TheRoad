@@ -1,13 +1,21 @@
-import { useMemo, useRef, useEffect, useCallback, useState, Component } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-import { Colors, BorderRadius, Typography } from '../../shared/theme';
+import { useMemo, useRef, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, Platform, Pressable, ScrollView } from 'react-native';
+import Constants from 'expo-constants';
+import { Colors, BorderRadius } from '../../shared/theme';
 
-/**
- * Hub 地图 — react-native-maps（GitHub: react-native-maps/react-native-maps）。
- * iOS: Apple Maps；Android: Google Maps（需 EXPO_PUBLIC_GOOGLE_MAPS_API_KEY）。
- * Android 缺少 API key 时显示 fallback 提示而非闪退。
- */
+function tryLoadMaps() {
+  if (Constants.appOwnership === 'expo') {
+    return null;
+  }
+  try {
+    const m = require('react-native-maps');
+    return m?.default ? m : null;
+  } catch {
+    return null;
+  }
+}
+
+const maps = tryLoadMaps();
 
 const DARK_MAP_STYLE = [
   { elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
@@ -38,10 +46,6 @@ const DEFAULT_REGION = {
   longitudeDelta: 100,
 };
 
-const HAS_GOOGLE_KEY =
-  Platform.OS !== 'android' ||
-  !!(process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim());
-
 function regionFromCoords(coords) {
   if (!coords || coords.length === 0) return DEFAULT_REGION;
   let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
@@ -61,37 +65,63 @@ function regionFromCoords(coords) {
   };
 }
 
-/* ── Error boundary: catches native map crashes (e.g. missing API key) ── */
-class MapErrorBoundary extends Component {
-  state = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
-  render() {
-    if (this.state.hasError) return <MapFallback message="Map failed to load" />;
-    return this.props.children;
-  }
-}
-
-function MapFallback({ message }) {
+function GlobeMapFallback({ locations, selectedName, onMarkerPress }) {
+  const items = useMemo(
+    () =>
+      (locations || []).map((l) => ({
+        id: l.id,
+        name: l.name,
+        label: l.nameEn ?? l.name,
+      })),
+    [locations],
+  );
   return (
-    <View style={styles.fallback}>
-      <Text style={styles.fallbackIcon}>🗺️</Text>
-      <Text style={styles.fallbackTitle}>{message}</Text>
-      <Text style={styles.fallbackHint}>
-        {Platform.OS === 'android'
-          ? 'Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY in .env and rebuild.'
-          : 'Check your network connection.'}
-      </Text>
+    <View style={fb.root}>
+      <Text style={fb.hint}>Map unavailable in Expo Go — dev build has full map.</Text>
+      <ScrollView nestedScrollEnabled style={fb.scroll}>
+        {items.map((m) => (
+          <Pressable
+            key={m.id}
+            onPress={() => onMarkerPress?.(m.name)}
+            style={[fb.row, selectedName === m.name && fb.rowOn]}
+          >
+            <Text style={[fb.t, selectedName === m.name && fb.tOn]} numberOfLines={1}>
+              {m.label}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
     </View>
   );
 }
 
-export default function GlobeMap({
+const fb = StyleSheet.create({
+  root: {
+    flex: 1,
+    minHeight: 260,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderSubtle,
+    padding: 12,
+  },
+  hint: { fontSize: 12, color: Colors.textSecondary, marginBottom: 8 },
+  scroll: { maxHeight: 200 },
+  row: { paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8, marginBottom: 4 },
+  rowOn: { borderWidth: 1, borderColor: Colors.secondary },
+  t: { fontSize: 13, color: Colors.textPrimary },
+  tOn: { color: Colors.secondary, fontWeight: '600' },
+});
+
+function GlobeMapNative({
   locations,
   routeCoords,
   selectedName,
   fitKey,
   onMarkerPress,
 }) {
+  const MapView = maps.default;
+  const { Marker, Polyline, PROVIDER_GOOGLE } = maps;
   const mapRef = useRef(null);
 
   const markers = useMemo(
@@ -130,68 +160,70 @@ export default function GlobeMap({
   }, [fitKey, markers]);
 
   const handleMarkerPress = useCallback(
-    (name) => { onMarkerPress?.(name); },
+    (name) => {
+      onMarkerPress?.(name);
+    },
     [onMarkerPress],
   );
-
-  if (!HAS_GOOGLE_KEY && Platform.OS === 'android') {
-    return <MapFallback message="Google Maps API key not configured" />;
-  }
 
   const isAndroid = Platform.OS === 'android';
 
   return (
-    <MapErrorBoundary>
-      <View style={styles.fill}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          provider={isAndroid ? PROVIDER_GOOGLE : undefined}
-          initialRegion={initialRegion}
-          customMapStyle={isAndroid ? DARK_MAP_STYLE : undefined}
-          userInterfaceStyle={isAndroid ? undefined : 'dark'}
-          mapType={isAndroid ? 'standard' : 'mutedStandard'}
-          showsUserLocation={false}
-          showsMyLocationButton={false}
-          showsCompass={false}
-          showsScale={false}
-          showsTraffic={false}
-          showsBuildings={false}
-          showsIndoors={false}
-          showsPointsOfInterest={false}
-          pitchEnabled={false}
-          rotateEnabled={false}
-          toolbarEnabled={false}
-          moveOnMarkerPress={false}
-        >
-          {polyline.length >= 2 && (
-            <Polyline
-              coordinates={polyline}
-              strokeColor={Colors.primary}
-              strokeWidth={3}
-              lineCap="round"
-              lineJoin="round"
-            />
-          )}
-          {markers.map((m) => {
-            const isSelected = selectedName === m.name;
-            const color = isSelected ? Colors.secondary : Colors.primary;
-            return (
-              <Marker
-                key={m.id}
-                coordinate={{ latitude: m.latitude, longitude: m.longitude }}
-                onPress={() => handleMarkerPress(m.name)}
-                tracksViewChanges={false}
-                anchor={{ x: 0.5, y: 0.5 }}
-              >
-                <MarkerDot color={color} label={m.label} isSelected={isSelected} />
-              </Marker>
-            );
-          })}
-        </MapView>
-      </View>
-    </MapErrorBoundary>
+    <View style={styles.fill}>
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        provider={isAndroid ? PROVIDER_GOOGLE : undefined}
+        initialRegion={initialRegion}
+        customMapStyle={isAndroid ? DARK_MAP_STYLE : undefined}
+        userInterfaceStyle={isAndroid ? undefined : 'dark'}
+        mapType={isAndroid ? 'standard' : 'mutedStandard'}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+        showsCompass={false}
+        showsScale={false}
+        showsTraffic={false}
+        showsBuildings={false}
+        showsIndoors={false}
+        showsPointsOfInterest={false}
+        pitchEnabled={false}
+        rotateEnabled={false}
+        toolbarEnabled={false}
+        moveOnMarkerPress={false}
+      >
+        {polyline.length >= 2 && (
+          <Polyline
+            coordinates={polyline}
+            strokeColor={Colors.primary}
+            strokeWidth={3}
+            lineCap="round"
+            lineJoin="round"
+          />
+        )}
+
+        {markers.map((m) => {
+          const isSelected = selectedName === m.name;
+          const color = isSelected ? Colors.secondary : Colors.primary;
+          return (
+            <Marker
+              key={m.id}
+              coordinate={{ latitude: m.latitude, longitude: m.longitude }}
+              onPress={() => handleMarkerPress(m.name)}
+              tracksViewChanges={false}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <MarkerDot color={color} label={m.label} isSelected={isSelected} />
+            </Marker>
+          );
+        })}
+      </MapView>
+    </View>
   );
+}
+
+export default function GlobeMap(props) {
+  if (!maps) return <GlobeMapFallback {...props} />;
+  return <GlobeMapNative {...props} />;
 }
 
 function MarkerDot({ color, label, isSelected }) {
@@ -249,31 +281,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '600',
-  },
-  fallback: {
-    flex: 1,
-    alignSelf: 'stretch',
-    minHeight: 260,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 24,
-  },
-  fallbackIcon: {
-    fontSize: 36,
-  },
-  fallbackTitle: {
-    color: Colors.textSecondary,
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  fallbackHint: {
-    color: Colors.textTertiary,
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 18,
   },
 });
