@@ -9,8 +9,12 @@ export const JourneysPresenter = {
     journeysStore.retry();
   },
 
-  onJourneyPress(journeyId) {
-    journeysStore.selectJourney(journeyId);
+  onCreateJourney(input) {
+    journeysStore.createJourney(input);
+  },
+
+  resetCreateState() {
+    journeysStore.resetCreateState();
   },
 
   getLoadStatus() {
@@ -21,14 +25,18 @@ export const JourneysPresenter = {
     return journeysStore.errorMessage;
   },
 
+  getCreateStatus() {
+    return journeysStore.createStatus;
+  },
+
+  getCreateErrorMessage() {
+    return journeysStore.createErrorMessage;
+  },
+
   getJourneys() {
     return journeysStore.journeys.map((item) => ({
       ...item,
       spentLabel: `$${item.spent.toLocaleString()}`,
     }));
-  },
-
-  getSelectedJourneyId() {
-    return journeysStore.selectedJourneyId;
   },
 };

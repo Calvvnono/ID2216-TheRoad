@@ -6,9 +6,11 @@ class JourneysStoreClass {
 
   loadStatus = 'idle';
 
+  createStatus = 'idle';
+
   errorMessage = null;
 
-  selectedJourneyId = null;
+  createErrorMessage = null;
 
   constructor() {
     makeAutoObservable(this);
@@ -32,10 +34,6 @@ class JourneysStoreClass {
     }
   }
 
-  selectJourney(journeyId) {
-    this.selectedJourneyId = journeyId;
-  }
-
   init() {
     if (this.loadStatus === 'idle') {
       this.loadJourneys();
@@ -44,6 +42,29 @@ class JourneysStoreClass {
 
   retry() {
     this.loadJourneys();
+  }
+
+  async createJourney(input) {
+    this.createStatus = 'loading';
+    this.createErrorMessage = null;
+
+    try {
+      const created = await JourneysService.createJourney(input);
+      runInAction(() => {
+        this.journeys = [created, ...this.journeys];
+        this.createStatus = 'success';
+      });
+    } catch (e) {
+      runInAction(() => {
+        this.createStatus = 'error';
+        this.createErrorMessage = e.message || 'Failed to create journey';
+      });
+    }
+  }
+
+  resetCreateState() {
+    this.createStatus = 'idle';
+    this.createErrorMessage = null;
   }
 }
 
