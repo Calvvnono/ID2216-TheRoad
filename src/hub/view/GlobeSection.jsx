@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { toJS } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { Colors, Typography, Spacing, BorderRadius } from '../../shared/theme';
 import HubPresenter from '../presenter/hubPresenter';
@@ -10,8 +9,8 @@ import GlobeMap from './GlobeMap';
 function GlobeSection() {
   const selected = HubPresenter.selectedLocationName;
   const storeNorm = HubPresenter.timeSliderNormalized;
-  const locations = toJS(HubPresenter.aggregatedLocations);
-  const routeCoords = toJS(HubPresenter.routeCoordinates);
+  const locations = HubPresenter.aggregatedLocationsPlain;
+  const routeCoords = HubPresenter.routeCoordinatesPlain;
   const dateLabel = HubPresenter.timeSliderDateLabel;
 
   const [slideLocal, setSlideLocal] = useState(storeNorm);
