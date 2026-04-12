@@ -1,4 +1,5 @@
 import { profileStore } from '../model/ProfileStore';
+import { DiscoverPresenter } from '../../discover/presenter/DiscoverPresenter';
 
 export const ProfilePresenter = {
   init() {
@@ -47,7 +48,9 @@ export const ProfilePresenter = {
   },
 
   onUpdateBudgetPerDay(budgetPerDay) {
-    profileStore.updateBudgetPerDay(budgetPerDay);
+    void profileStore.updateBudgetPerDay(budgetPerDay).then((saved) => {
+      if (saved) DiscoverPresenter.reload();
+    });
   },
 
   onUploadAvatar(localUri) {

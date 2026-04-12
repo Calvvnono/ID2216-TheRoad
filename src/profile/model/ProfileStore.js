@@ -101,19 +101,21 @@ class ProfileStoreClass {
       runInAction(() => {
         this.preferences = { ...this.preferences, ...newPrefs };
       });
+      return true;
     } catch (e) {
       runInAction(() => {
         this.errorMessage = e.message ?? 'Failed to save preferences';
       });
+      return false;
     }
   }
 
   async updateBudgetPerDay(budgetPerDay) {
-    if (!this.preferences) return;
+    if (!this.preferences) return false;
     const nextBudget = Number(budgetPerDay);
-    if (!Number.isFinite(nextBudget) || nextBudget <= 0) return;
+    if (!Number.isFinite(nextBudget) || nextBudget <= 0) return false;
 
-    await this.updatePreferences({ budgetPerDay: Math.round(nextBudget) });
+    return this.updatePreferences({ budgetPerDay: Math.round(nextBudget) });
   }
 
   async uploadAvatar(localUri) {
