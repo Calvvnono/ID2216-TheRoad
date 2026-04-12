@@ -1,4 +1,11 @@
+// Default: EXPO_PUBLIC_PLACES_API_KEY from `.env` or EAS.
+// Optional embedded fallback: copy `embedded-google-api-key.example.json` →
+// `embedded-google-api-key.json` (gitignored), then uncomment the two lines below.
+// import embedded from '../../../embedded-google-api-key.json';
+
 const API_KEY = process.env.EXPO_PUBLIC_PLACES_API_KEY;
+// const API_KEY =
+//   process.env.EXPO_PUBLIC_PLACES_API_KEY || embedded.googleApiKey;
 const BASE = 'https://places.googleapis.com/v1';
 
 const WORLD_REGIONS = [
