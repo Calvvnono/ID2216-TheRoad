@@ -80,7 +80,7 @@ class HubStore {
       this.error = null;
     });
     try {
-      const data = await HubService.fetchTrips('mock-user');
+      const data = await HubService.fetchTrips();
       runInAction(() => {
         this.trips = data;
         this.timeSliderNormalized = 1;

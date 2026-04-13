@@ -2,15 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { Colors } from '../../shared/theme/colors';
 
-export function PreferencePanel({ preferences, onSaveBudget }) {
+export function PreferencePanel({
+  preferences,
+  budgetInput,
+  onBudgetInputChange,
+  onBudgetSave,
+}) {
   const budgetDisplay = `$${preferences.budgetPerDay}/day`;
-  const [budgetInput, setBudgetInput] = React.useState(
-    String(preferences.budgetPerDay),
-  );
-
-  React.useEffect(() => {
-    setBudgetInput(String(preferences.budgetPerDay));
-  }, [preferences.budgetPerDay]);
 
   return (
     <View style={styles.card}>
@@ -26,7 +24,7 @@ export function PreferencePanel({ preferences, onSaveBudget }) {
         <View style={styles.inlineEditor}>
           <TextInput
             value={budgetInput}
-            onChangeText={setBudgetInput}
+            onChangeText={onBudgetInputChange}
             keyboardType="number-pad"
             style={styles.budgetInput}
             placeholder="Budget"
@@ -34,7 +32,7 @@ export function PreferencePanel({ preferences, onSaveBudget }) {
           />
           <Pressable
             style={styles.saveButton}
-            onPress={() => onSaveBudget?.(budgetInput)}
+            onPress={onBudgetSave}
           >
             <Text style={styles.saveButtonText}>Save</Text>
           </Pressable>

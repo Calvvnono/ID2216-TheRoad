@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { getDownloadURL, ref } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
+import { placesClient } from '../../shared/api/placesClient';
 import {
   collection,
   deleteDoc,
@@ -212,6 +213,34 @@ export const ProfileService = {
     const avatarStorageRef = ref(storage, avatarPath);
     const downloadUrl = await getDownloadURL(avatarStorageRef);
     return this.updateProfilePatch({ avatarUrl: downloadUrl }, resolvedUid);
+  },
+
+  async fetchPlaceDetail(placeId, placeName) {
+    function mapDetail(raw) {
+      return {
+        name: raw.displayName?.text ?? '',
+        address: raw.shortFormattedAddress ?? '',
+        description: raw.editorialSummary?.text ?? null,
+        rating: raw.rating ?? null,
+        ratingCount: raw.userRatingCount ?? null,
+        website: raw.websiteUri ?? null,
+        openingHours: raw.regularOpeningHours?.weekdayDescriptions ?? null,
+      };
+    }
+    try {
+      const raw = await placesClient.getPlaceDetail(placeId);
+      return mapDetail(raw);
+    } catch {
+      if (!placeName) return null;
+      try {
+        const found = await placesClient.searchByName(placeName);
+        if (!found) return null;
+        const raw = await placesClient.getPlaceDetail(found.id);
+        return mapDetail(raw);
+      } catch {
+        return null;
+      }
+    }
   },
 
   async exportUserData(uid) {

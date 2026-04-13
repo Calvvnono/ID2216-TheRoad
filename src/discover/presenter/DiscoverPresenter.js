@@ -26,11 +26,7 @@ export const DiscoverPresenter = {
   },
 
   getTopPicks() {
-    return discoverStore.topPicks.map((place) => ({
-      ...place,
-      heartIconName: place.isInWishlist ? 'heart' : 'heart-outline',
-      heartActive: !!place.isInWishlist,
-    }));
+    return discoverStore.topPicksViewModel;
   },
 
   getCommunityInsights() {
@@ -50,15 +46,7 @@ export const DiscoverPresenter = {
   },
 
   getSelectedPlace() {
-    const p = discoverStore.selectedPlace;
-    if (!p) return null;
-    return {
-      id: p.id,
-      name: p.name,
-      country: p.country,
-      imageUrl: p.imageUrl,
-      whyVisit: p.reason ?? null,
-    };
+    return discoverStore.selectedPlace;
   },
 
   getPlaceDetail() {

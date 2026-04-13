@@ -1,12 +1,13 @@
+import { toJS } from 'mobx';
 import hubStore from '../model/hubStore';
 import { AsyncStatus } from '../model/asyncStatus';
 
 /**
  * Hub presenter — the ONLY bridge between View and Model.
  *
- * Views read data exclusively through these getters and dispatch
- * user actions through the methods below. No View may import
- * hubStore or any Model module directly.
+ * HubScreen (observer) reads from these getters and passes values
+ * into child view components via props. Sub-views must not import
+ * hubStore, MobX, HubPresenter, or any Model / persistence module.
  */
 const HubPresenter = {
 
@@ -27,6 +28,22 @@ const HubPresenter = {
   get selectedLocationName(){ return hubStore.selectedLocationName; },
   get selectedLocation()    { return hubStore.selectedLocation; },
   get stats()               { return hubStore.stats; },
+
+  /**
+   * Plain JS copies for Views (and native map children). MobX `toJS` lives here only.
+   */
+  get aggregatedLocationsPlain() {
+    return toJS(hubStore.aggregatedLocations);
+  },
+
+  get routeCoordinatesPlain() {
+    return toJS(hubStore.routeCoordinates);
+  },
+
+  get selectedLocationPlain() {
+    const loc = hubStore.selectedLocation;
+    return loc ? toJS(loc) : null;
+  },
 
   get timeSliderNormalized() { return hubStore.timeSliderNormalized; },
 

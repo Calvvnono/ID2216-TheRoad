@@ -1,4 +1,4 @@
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable, reaction, runInAction } from 'mobx';
 import { profileStore } from '../../profile/model/ProfileStore';
 import { DiscoverService } from './DiscoverService';
 
@@ -19,8 +19,31 @@ class DiscoverStoreClass {
 
   detailStatus = 'idle';
 
+  get topPicksViewModel() {
+    return this.topPicks.map((place) => ({
+      ...place,
+      heartIconName: place.isInWishlist ? 'heart' : 'heart-outline',
+      heartActive: !!place.isInWishlist,
+    }));
+  }
+
   constructor() {
     makeAutoObservable(this);
+    reaction(
+      () => {
+        const prefs = profileStore.preferences;
+        if (!prefs) return null;
+        const activities = Array.isArray(prefs.favoriteActivities)
+          ? prefs.favoriteActivities.join('|')
+          : '';
+        return `${prefs.budgetPerDay}|${activities}`;
+      },
+      (signature, previousSignature) => {
+        if (!signature || signature === previousSignature) return;
+        if (this.loadStatus === 'idle') return;
+        void this.loadAll();
+      },
+    );
   }
 
   init() {
@@ -70,7 +93,13 @@ class DiscoverStoreClass {
   }
 
   async openPlaceDetail(place) {
-    this.selectedPlace = place;
+    this.selectedPlace = {
+      id: place.id,
+      name: place.name,
+      country: place.country,
+      imageUrl: place.imageUrl,
+      whyVisit: place.reason ?? null,
+    };
     this.placeDetail = null;
     this.detailStatus = 'loading';
     const detail = await DiscoverService.fetchPlaceDetail(place.id, place.name);

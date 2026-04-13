@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { observer } from 'mobx-react-lite';
-import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { ProfilePresenter } from '../presenter/ProfilePresenter';
@@ -22,21 +21,6 @@ export const ProfileScreen = observer(function ProfileScreen() {
   const preferences = ProfilePresenter.getPreferences();
   const isUploading =
     ProfilePresenter.getAvatarUploadStatus() === 'loading';
-
-  const pickAndUploadAvatar = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.7,
-      aspect: [1, 1],
-    });
-
-    if (result.canceled || !result.assets?.[0]?.uri) return;
-    ProfilePresenter.onUploadAvatar(result.assets[0].uri);
-  };
 
   return (
     <View style={styles.screen}>
@@ -60,7 +44,7 @@ export const ProfileScreen = observer(function ProfileScreen() {
           {profile ? (
             <ProfileHeader
               profile={profile}
-              onUploadAvatar={pickAndUploadAvatar}
+              onUploadAvatar={() => ProfilePresenter.onPickAvatar()}
               isUploading={isUploading}
             />
           ) : null}
@@ -80,7 +64,13 @@ export const ProfileScreen = observer(function ProfileScreen() {
           {preferences ? (
             <PreferencePanel
               preferences={preferences}
-              onSaveBudget={ProfilePresenter.onUpdateBudgetPerDay}
+              budgetInput={ProfilePresenter.getBudgetInputValue()}
+              onBudgetInputChange={ProfilePresenter.onBudgetInputChange}
+              onBudgetSave={() =>
+                ProfilePresenter.onUpdateBudgetPerDay(
+                  ProfilePresenter.getBudgetInputValue(),
+                )
+              }
             />
           ) : null}
         </ScrollView>

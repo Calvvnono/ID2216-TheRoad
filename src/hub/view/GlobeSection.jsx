@@ -2,17 +2,22 @@ import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { toJS } from 'mobx';
-import { observer } from 'mobx-react-lite';
 import { Colors, Typography, Spacing, BorderRadius } from '../../shared/theme';
-import HubPresenter from '../presenter/hubPresenter';
 import GlobeMap from './GlobeMap';
-function GlobeSection() {
-  const selected = HubPresenter.selectedLocationName;
-  const storeNorm = HubPresenter.timeSliderNormalized;
-  const locations = toJS(HubPresenter.aggregatedLocations);
-  const routeCoords = toJS(HubPresenter.routeCoordinates);
-  const dateLabel = HubPresenter.timeSliderDateLabel;
+
+/**
+ * Globe + time slider. All data and actions come from HubScreen via props
+ * (HubScreen reads from HubPresenter).
+ */
+function GlobeSection({
+  selectedLocationName: selected,
+  timeSliderNormalized: storeNorm,
+  aggregatedLocationsPlain: locations,
+  routeCoordinatesPlain: routeCoords,
+  timeSliderDateLabel: dateLabel,
+  onMarkerPress,
+  onTimeSliderChange,
+}) {
 
   const [slideLocal, setSlideLocal] = useState(storeNorm);
   useEffect(() => {
@@ -29,7 +34,7 @@ function GlobeSection() {
           routeCoords={routeCoords}
           selectedName={selected}
           fitKey={fitKey}
-          onMarkerPress={HubPresenter.onMarkerPress}
+          onMarkerPress={onMarkerPress}
         />
       </View>
 
@@ -50,7 +55,7 @@ function GlobeSection() {
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={() => {
               setSlideLocal(1);
-              HubPresenter.onTimeSliderChange(1);
+              onTimeSliderChange(1);
             }}
           >
             <Text style={styles.showAll}>Show All</Text>
@@ -64,7 +69,7 @@ function GlobeSection() {
           value={slideLocal}
           onValueChange={(v) => {
             setSlideLocal(v);
-            HubPresenter.onTimeSliderChange(v);
+            onTimeSliderChange(v);
           }}
           minimumTrackTintColor={Colors.primary}
           maximumTrackTintColor={Colors.surfaceLight}
@@ -143,4 +148,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default observer(GlobeSection);
+export default GlobeSection;

@@ -1,23 +1,24 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { observer } from 'mobx-react-lite';
 import {
   Colors,
   Typography,
   Spacing,
   BorderRadius,
 } from '../../shared/theme';
-import HubPresenter from '../presenter/hubPresenter';
+import MapLocationPill from './MapLocationPill';
 
 /**
  * Location card grid — pure RN replacement for react-native-maps.
  * Shows visited locations as tappable cards with visit stats.
  * Polyline route replaced by numbered sequence badges.
  *
- * All data read from HubPresenter; no direct Model imports.
+ * Not currently wired in HubScreen; if used, pass props from HubScreen (HubPresenter).
  */
-function MapSection() {
-  const locations = HubPresenter.aggregatedLocations;
-  const selected = HubPresenter.selectedLocationName;
+function MapSection({
+  aggregatedLocationsPlain: locations,
+  selectedLocationName: selected,
+  onMarkerPress,
+}) {
 
   return (
     <View style={styles.wrapper}>
@@ -38,7 +39,7 @@ function MapSection() {
               key={loc.id}
               activeOpacity={0.7}
               style={[styles.card, isSelected && styles.cardSelected]}
-              onPress={() => HubPresenter.onMarkerPress(loc.name)}
+              onPress={() => onMarkerPress(loc.name)}
             >
               <View style={styles.cardTop}>
                 <View
@@ -70,9 +71,9 @@ function MapSection() {
               </View>
 
               <View style={styles.statsRow}>
-                <Pill label="Visits" value={loc.visitCount} color={Colors.primary} />
-                <Pill label="Days" value={loc.totalDays} color={Colors.secondary} />
-                <Pill
+                <MapLocationPill label="Visits" value={loc.visitCount} color={Colors.primary} />
+                <MapLocationPill label="Days" value={loc.totalDays} color={Colors.secondary} />
+                <MapLocationPill
                   label="Spent"
                   value={`$${loc.totalSpent.toLocaleString()}`}
                   color={Colors.tertiary}
@@ -82,15 +83,6 @@ function MapSection() {
           );
         })}
       </ScrollView>
-    </View>
-  );
-}
-
-function Pill({ label, value, color }) {
-  return (
-    <View style={[styles.pill, { borderColor: color }]}>
-      <Text style={[styles.pillValue, { color }]}>{value}</Text>
-      <Text style={styles.pillLabel}>{label}</Text>
     </View>
   );
 }
@@ -186,24 +178,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.xs,
   },
-  pill: {
-    flex: 1,
-    flexDirection: 'column',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: BorderRadius.sm,
-    paddingVertical: Spacing.xs,
-    backgroundColor: Colors.surfaceLight,
-  },
-  pillValue: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  pillLabel: {
-    fontSize: 10,
-    color: Colors.textTertiary,
-    marginTop: 1,
-  },
 });
 
-export default observer(MapSection);
+export default MapSection;

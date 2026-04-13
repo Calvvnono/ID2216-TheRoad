@@ -11,8 +11,6 @@ import {
   Dimensions,
   PanResponder,
 } from 'react-native';
-import { toJS } from 'mobx';
-import { observer } from 'mobx-react-lite';
 import {
   Colors,
   Typography,
@@ -20,8 +18,8 @@ import {
   BorderRadius,
   CommonStyles,
 } from '../../shared/theme';
-import HubPresenter from '../presenter/hubPresenter';
 import ExpenseChart from './ExpenseChart';
+import SheetQuickStat from './SheetQuickStat';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
@@ -30,14 +28,13 @@ const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
  * Bottom sheet showing details for a selected location.
  * Uses RN Modal + Animated instead of @gorhom/bottom-sheet
  * so it works in Expo Go without native worklets.
+ * Props from HubScreen (HubPresenter).
  */
-function LocationSheet() {
-  const raw = HubPresenter.selectedLocation;
-  const location = raw ? toJS(raw) : null;
+function LocationSheet({ selectedLocationName: selectedName, selectedLocation: location, onSheetDismiss }) {
   const slideAnim = useRef(new Animated.Value(SHEET_HEIGHT)).current;
 
   useEffect(() => {
-    if (location) {
+    if (selectedName) {
       Animated.spring(slideAnim, {
         toValue: 0,
         useNativeDriver: true,
@@ -47,7 +44,7 @@ function LocationSheet() {
     } else {
       slideAnim.setValue(SHEET_HEIGHT);
     }
-  }, [location, slideAnim]);
+  }, [selectedName, slideAnim]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -62,7 +59,7 @@ function LocationSheet() {
             toValue: SHEET_HEIGHT,
             duration: 200,
             useNativeDriver: true,
-          }).start(() => HubPresenter.onSheetDismiss());
+          }).start(() => onSheetDismiss());
         } else {
           Animated.spring(slideAnim, {
             toValue: 0,
@@ -80,9 +77,9 @@ function LocationSheet() {
       visible={!!location}
       transparent
       animationType="none"
-      onRequestClose={HubPresenter.onSheetDismiss}
+      onRequestClose={onSheetDismiss}
     >
-      <TouchableWithoutFeedback onPress={HubPresenter.onSheetDismiss}>
+      <TouchableWithoutFeedback onPress={onSheetDismiss}>
         <View style={styles.overlay} />
       </TouchableWithoutFeedback>
 
@@ -108,16 +105,16 @@ function LocationSheet() {
             </View>
             <TouchableOpacity
               style={styles.closeBtn}
-              onPress={HubPresenter.onSheetDismiss}
+              onPress={onSheetDismiss}
             >
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.statsRow}>
-            <QuickStat label="Visits" value={location.visitCount} color={Colors.primary} />
-            <QuickStat label="Days" value={location.totalDays} color={Colors.secondary} />
-            <QuickStat
+            <SheetQuickStat label="Visits" value={location.visitCount} color={Colors.primary} />
+            <SheetQuickStat label="Days" value={location.totalDays} color={Colors.secondary} />
+            <SheetQuickStat
               label="Spent"
               value={`$${location.totalSpent.toLocaleString()}`}
               color={Colors.tertiary}
@@ -130,15 +127,6 @@ function LocationSheet() {
         </ScrollView>
       </Animated.View>
     </Modal>
-  );
-}
-
-function QuickStat({ label, value, color }) {
-  return (
-    <View style={[styles.quickStat, { borderColor: color }]}>
-      <Text style={[styles.quickStatValue, { color }]}>{value}</Text>
-      <Text style={styles.quickStatLabel}>{label}</Text>
-    </View>
   );
 }
 
@@ -201,22 +189,6 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginTop: Spacing.md,
   },
-  quickStat: {
-    flex: 1,
-    backgroundColor: Colors.surfaceLight,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
-    padding: Spacing.md,
-    alignItems: 'center',
-  },
-  quickStatValue: {
-    ...Typography.statSmall,
-  },
-  quickStatLabel: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    marginTop: Spacing.xxs,
-  },
 });
 
-export default observer(LocationSheet);
+export default LocationSheet;

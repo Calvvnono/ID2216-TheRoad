@@ -14,7 +14,7 @@ import GlobeSection from './GlobeSection';
 import StatsCards from './StatsCards';
 import LocationSheet from './LocationSheet';
 
-/** Hub dashboard: GlobeSection, stats, location sheet; state via HubPresenter / MobX. */
+/** Hub dashboard: sole view that imports HubPresenter; children are props-driven. */
 function HubScreen() {
   const [dashboardOpen, setDashboardOpen] = useState(false);
 
@@ -59,7 +59,15 @@ function HubScreen() {
 
             {HubPresenter.isSuccess && (
               <View style={styles.body}>
-                <GlobeSection />
+                <GlobeSection
+                  selectedLocationName={HubPresenter.selectedLocationName}
+                  timeSliderNormalized={HubPresenter.timeSliderNormalized}
+                  aggregatedLocationsPlain={HubPresenter.aggregatedLocationsPlain}
+                  routeCoordinatesPlain={HubPresenter.routeCoordinatesPlain}
+                  timeSliderDateLabel={HubPresenter.timeSliderDateLabel}
+                  onMarkerPress={HubPresenter.onMarkerPress}
+                  onTimeSliderChange={HubPresenter.onTimeSliderChange}
+                />
 
                 <TouchableOpacity
                   style={styles.dashboardBtn}
@@ -74,12 +82,18 @@ function HubScreen() {
                   </Text>
                 </TouchableOpacity>
 
-                {dashboardOpen && <StatsCards />}
+                {dashboardOpen && <StatsCards stats={HubPresenter.stats} />}
               </View>
             )}
           </View>
 
-          {HubPresenter.isSuccess && <LocationSheet />}
+          {HubPresenter.isSuccess && (
+            <LocationSheet
+              selectedLocationName={HubPresenter.selectedLocationName}
+              selectedLocation={HubPresenter.selectedLocationPlain}
+              onSheetDismiss={HubPresenter.onSheetDismiss}
+            />
+          )}
         </View>
     </GestureHandlerRootView>
   );

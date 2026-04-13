@@ -1,6 +1,13 @@
 const appJson = require('./app.json');
 
-const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+// Default: use EXPO_PUBLIC_GOOGLE_MAPS_API_KEY from `.env` or EAS env.
+// To bundle a key without env: copy `embedded-google-api-key.example.json` →
+// `embedded-google-api-key.json` (gitignored), then uncomment the two lines below.
+// const embedded = require('./embedded-google-api-key.json');
+
+const googleMapsApiKey =
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+// || embedded.googleApiKey || '';
 
 module.exports = {
   expo: {
@@ -24,7 +31,7 @@ module.exports = {
       ],
     ],
     extra: {
-      ...appJson.expo?.extra,
+      ...appJson.expo.extra,
       eas: {
         projectId: 'f0ac63ea-687d-4156-93b9-325d1cac87a3',
       },
