@@ -8,7 +8,6 @@ const BAR_PATTERN = [
   26, 14, 20, 28, 12, 22, 16, 24, 10, 18,
 ];
 const STORY_INTERVAL_MS = 1300;
-const STORY_CROSSFADE_MS = 260;
 
 function StatBox({ label, value }) {
   return (
@@ -22,10 +21,8 @@ function StatBox({ label, value }) {
 export function JourneyCard({ journey, onPress }) {
   const cardScale = useRef(new Animated.Value(1)).current;
   const cardOpacity = useRef(new Animated.Value(1)).current;
-  const storyFade = useRef(new Animated.Value(0)).current;
   const [isStoryPlaying, setStoryPlaying] = useState(false);
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
-  const [nextFrameIndex, setNextFrameIndex] = useState(0);
 
   const storyFrames = useMemo(() => {
     const fromMemories = Array.isArray(journey.photoMemories)
@@ -41,36 +38,21 @@ export function JourneyCard({ journey, onPress }) {
   useEffect(() => {
     setStoryPlaying(false);
     setCurrentFrameIndex(0);
-    setNextFrameIndex(storyFrames.length > 1 ? 1 : 0);
-    storyFade.setValue(0);
-  }, [journey.id, storyFrames.length, storyFade]);
+  }, [journey.id, storyFrames.length]);
 
   useEffect(() => {
     if (!isStoryPlaying || storyFrames.length < 2) {
       return undefined;
     }
 
-    const next = (currentFrameIndex + 1) % storyFrames.length;
-    const timer = setTimeout(() => {
-      setNextFrameIndex(next);
-      storyFade.setValue(0);
-      const animation = Animated.timing(storyFade, {
-        toValue: 1,
-        duration: STORY_CROSSFADE_MS,
-        useNativeDriver: true,
-      });
-
-      animation.start(({ finished }) => {
-        if (!finished) return;
-        setCurrentFrameIndex(next);
-        storyFade.setValue(0);
-      });
+    const timer = setInterval(() => {
+      setCurrentFrameIndex((prev) => (prev + 1) % storyFrames.length);
     }, STORY_INTERVAL_MS);
 
     return () => {
-      clearTimeout(timer);
+      clearInterval(timer);
     };
-  }, [isStoryPlaying, currentFrameIndex, storyFrames.length, storyFade]);
+  }, [isStoryPlaying, storyFrames.length]);
 
   const handlePress = () => {
     Animated.sequence([
@@ -110,7 +92,6 @@ export function JourneyCard({ journey, onPress }) {
   };
 
   const currentFrame = storyFrames[currentFrameIndex] || journey.imageUrl;
-  const nextFrame = storyFrames[nextFrameIndex] || currentFrame;
 
   return (
     <Pressable onPress={handlePress}>
@@ -124,15 +105,6 @@ export function JourneyCard({ journey, onPress }) {
         ]}
       >
         <Image source={{ uri: currentFrame }} style={styles.backgroundImage} />
-        {canPlayStory ? (
-          <Animated.Image
-            source={{ uri: nextFrame }}
-            style={[
-              styles.backgroundImage,
-              { opacity: storyFade },
-            ]}
-          />
-        ) : null}
         <View style={styles.overlay} />
 
         <View style={styles.content}>

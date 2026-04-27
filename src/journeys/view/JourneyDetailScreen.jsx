@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Image,
+  Modal,
   Pressable,
   Animated,
 } from 'react-native';
@@ -16,7 +17,6 @@ import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { JourneyDetailPresenter } from '../presenter/JourneyDetailPresenter';
 
 const HERO_STORY_INTERVAL_MS = 1400;
-const HERO_STORY_CROSSFADE_MS = 260;
 
 function DailyExpenseBars({ values }) {
   const max = values.length > 0 ? Math.max(...values) : 1;
@@ -45,10 +45,10 @@ function DailyExpenseBars({ values }) {
 export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const router = useRouter();
   const entryAnim = useRef(new Animated.Value(0)).current;
-  const heroStoryFade = useRef(new Animated.Value(0)).current;
   const [isHeroStoryPlaying, setHeroStoryPlaying] = useState(false);
   const [heroFrameIndex, setHeroFrameIndex] = useState(0);
-  const [heroNextFrameIndex, setHeroNextFrameIndex] = useState(0);
+  const [previewPhotoUri, setPreviewPhotoUri] = useState('');
+  const [isPreviewVisible, setPreviewVisible] = useState(false);
   const params = useLocalSearchParams();
   const journeyIdParam = Array.isArray(params.journeyId)
     ? params.journeyId[0]
@@ -106,45 +106,41 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
 
   const canPlayHeroStory = heroStoryFrames.length > 1;
   const currentHeroFrame = heroStoryFrames[heroFrameIndex] || journey?.detailHeroImage || '';
-  const nextHeroFrame = heroStoryFrames[heroNextFrameIndex] || currentHeroFrame;
 
   useEffect(() => {
     setHeroStoryPlaying(false);
     setHeroFrameIndex(0);
-    setHeroNextFrameIndex(heroStoryFrames.length > 1 ? 1 : 0);
-    heroStoryFade.setValue(0);
-  }, [journey?.id, heroStoryFrames.length, heroStoryFade]);
+    setPreviewVisible(false);
+    setPreviewPhotoUri('');
+  }, [journey?.id, heroStoryFrames.length]);
 
   useEffect(() => {
     if (!isHeroStoryPlaying || heroStoryFrames.length < 2) {
       return undefined;
     }
 
-    const next = (heroFrameIndex + 1) % heroStoryFrames.length;
-    const timer = setTimeout(() => {
-      setHeroNextFrameIndex(next);
-      heroStoryFade.setValue(0);
-      const animation = Animated.timing(heroStoryFade, {
-        toValue: 1,
-        duration: HERO_STORY_CROSSFADE_MS,
-        useNativeDriver: true,
-      });
-
-      animation.start(({ finished }) => {
-        if (!finished) return;
-        setHeroFrameIndex(next);
-        heroStoryFade.setValue(0);
-      });
+    const timer = setInterval(() => {
+      setHeroFrameIndex((prev) => (prev + 1) % heroStoryFrames.length);
     }, HERO_STORY_INTERVAL_MS);
 
     return () => {
-      clearTimeout(timer);
+      clearInterval(timer);
     };
-  }, [isHeroStoryPlaying, heroFrameIndex, heroStoryFrames.length, heroStoryFade]);
+  }, [isHeroStoryPlaying, heroStoryFrames.length]);
 
   const toggleHeroStoryPlayback = () => {
     if (!canPlayHeroStory) return;
     setHeroStoryPlaying((prev) => !prev);
+  };
+
+  const openPhotoPreview = (uri) => {
+    if (!uri) return;
+    setPreviewPhotoUri(uri);
+    setPreviewVisible(true);
+  };
+
+  const closePhotoPreview = () => {
+    setPreviewVisible(false);
   };
 
   return (
@@ -178,12 +174,6 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
             >
               <View style={styles.heroWrap}>
                 <Image source={{ uri: currentHeroFrame }} style={styles.heroImage} />
-                {canPlayHeroStory ? (
-                  <Animated.Image
-                    source={{ uri: nextHeroFrame }}
-                    style={[styles.heroImage, { opacity: heroStoryFade }]}
-                  />
-                ) : null}
                 <View style={styles.heroOverlay} />
                 <Pressable
                   style={[
@@ -232,11 +222,16 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
                   contentContainerStyle={styles.memoryRow}
                 >
                   {photoMemories.map((url, index) => (
-                    <Image
+                    <Pressable
                       key={`${journey.id}-memory-${index}`}
-                      source={{ uri: url }}
-                      style={styles.memoryImage}
-                    />
+                      onPress={() => openPhotoPreview(url)}
+                      style={styles.memoryImagePress}
+                    >
+                      <Image
+                        source={{ uri: url }}
+                        style={styles.memoryImage}
+                      />
+                    </Pressable>
                   ))}
                 </ScrollView>
               </View>
@@ -251,6 +246,27 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
           </View>
         )}
       </StatusOverlay>
+
+      <Modal
+        visible={isPreviewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closePhotoPreview}
+      >
+        <View style={styles.previewBackdrop}>
+          <Pressable style={styles.previewCloseBtn} onPress={closePhotoPreview}>
+            <Ionicons name="close" size={24} color={Colors.textPrimary} />
+          </Pressable>
+
+          {previewPhotoUri ? (
+            <Image
+              source={{ uri: previewPhotoUri }}
+              style={styles.previewImage}
+              resizeMode="contain"
+            />
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 });
@@ -409,6 +425,10 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingRight: 10,
   },
+  memoryImagePress: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   memoryImage: {
     width: 170,
     height: 95,
@@ -416,6 +436,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderSubtle,
     backgroundColor: Colors.surface,
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 12, 22, 0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  previewCloseBtn: {
+    position: 'absolute',
+    top: 56,
+    right: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.borderDefault,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  previewImage: {
+    width: '100%',
+    height: '72%',
+    borderRadius: 10,
   },
   notFoundWrap: {
     flex: 1,
