@@ -8,9 +8,13 @@ class JourneysStoreClass {
 
   createStatus = 'idle';
 
+  updateStatus = 'idle';
+
   errorMessage = null;
 
   createErrorMessage = null;
+
+  updateErrorMessage = null;
 
   constructor() {
     makeAutoObservable(this);
@@ -65,6 +69,31 @@ class JourneysStoreClass {
   resetCreateState() {
     this.createStatus = 'idle';
     this.createErrorMessage = null;
+  }
+
+  async updateJourney(input) {
+    this.updateStatus = 'loading';
+    this.updateErrorMessage = null;
+
+    try {
+      const updated = await JourneysService.updateJourney(input);
+      runInAction(() => {
+        this.journeys = this.journeys.map((item) =>
+          String(item.id) === String(updated.id) ? updated : item,
+        );
+        this.updateStatus = 'success';
+      });
+    } catch (e) {
+      runInAction(() => {
+        this.updateStatus = 'error';
+        this.updateErrorMessage = e.message || 'Failed to update journey';
+      });
+    }
+  }
+
+  resetUpdateState() {
+    this.updateStatus = 'idle';
+    this.updateErrorMessage = null;
   }
 }
 

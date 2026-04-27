@@ -31,31 +31,46 @@ function Field({ label, value, placeholder, onChangeText, keyboardType = 'defaul
 export function AddJourneyModal({
   visible,
   form,
+  mode = 'create',
   createStatus,
   createErrorMessage,
+  submitStatus,
+  submitErrorMessage,
   onChangeField,
   onPickPhotos,
+  onRemoveExistingPhoto,
+  onRemoveLocalPhoto,
   onClose,
   onSubmit,
 }) {
-  const isSaving = createStatus === 'loading';
-  const selectedPhotoUris = Array.isArray(form.localPhotoUris)
+  const actionStatus = submitStatus || createStatus || 'idle';
+  const actionErrorMessage = submitErrorMessage || createErrorMessage;
+  const isSaving = actionStatus === 'loading';
+  const selectedLocalPhotoUris = Array.isArray(form.localPhotoUris)
     ? form.localPhotoUris
     : [];
+  const selectedExistingPhotoUrls = Array.isArray(form.existingPhotoUrls)
+    ? form.existingPhotoUrls
+    : [];
+  const selectedPhotoCount = selectedExistingPhotoUrls.length + selectedLocalPhotoUris.length;
+  const isEditMode = mode === 'edit';
+  const titleText = isEditMode ? 'Edit Journey' : 'Add New Journey';
+  const pickPhotosText = isEditMode ? 'Add Photos from Album' : 'Select Photos from Album';
+  const submitText = isEditMode ? 'Save Changes' : 'Upload Journey';
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
           <View style={styles.headerRow}>
-            <Text style={styles.title}>Add New Journey</Text>
+            <Text style={styles.title}>{titleText}</Text>
             <Pressable style={styles.closeBtn} onPress={onClose} disabled={isSaving}>
               <Text style={styles.closeBtnText}>✕</Text>
             </Pressable>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-            <Text style={styles.helperText}>Required: destination, country, dates, and at least one album photo.</Text>
+            <Text style={styles.helperText}>Required: destination, country, dates, and at least one photo.</Text>
 
             <Field
               label="Destination"
@@ -89,24 +104,48 @@ export function AddJourneyModal({
                 onPress={onPickPhotos}
                 disabled={isSaving}
               >
-                <Text style={styles.photoPickerBtnText}>Select Photos from Album</Text>
+                <Text style={styles.photoPickerBtnText}>{pickPhotosText}</Text>
               </Pressable>
               <Text style={styles.photoCountText}>
-                {selectedPhotoUris.length} photo(s) selected
+                {selectedPhotoCount} photo(s) selected
               </Text>
 
-              {selectedPhotoUris.length > 0 ? (
+              {selectedPhotoCount > 0 ? (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.previewRow}
                 >
-                  {selectedPhotoUris.map((uri, index) => (
-                    <Image
-                      key={`preview-${index}`}
-                      source={{ uri }}
-                      style={styles.previewImage}
-                    />
+                  {selectedExistingPhotoUrls.map((uri, index) => (
+                    <View key={`existing-preview-${index}`} style={styles.previewItem}>
+                      <Image
+                        source={{ uri }}
+                        style={styles.previewImage}
+                      />
+                      <Pressable
+                        style={styles.removePhotoBtn}
+                        onPress={() => onRemoveExistingPhoto?.(index)}
+                        disabled={isSaving}
+                      >
+                        <Text style={styles.removePhotoBtnText}>✕</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+
+                  {selectedLocalPhotoUris.map((uri, index) => (
+                    <View key={`local-preview-${index}`} style={styles.previewItem}>
+                      <Image
+                        source={{ uri }}
+                        style={styles.previewImage}
+                      />
+                      <Pressable
+                        style={styles.removePhotoBtn}
+                        onPress={() => onRemoveLocalPhoto?.(index)}
+                        disabled={isSaving}
+                      >
+                        <Text style={styles.removePhotoBtnText}>✕</Text>
+                      </Pressable>
+                    </View>
                   ))}
                 </ScrollView>
               ) : null}
@@ -139,8 +178,8 @@ export function AddJourneyModal({
               onChangeText={(v) => onChangeField('dailyExpenses', v)}
             />
 
-            {createErrorMessage ? (
-              <Text style={styles.errorText}>{createErrorMessage}</Text>
+            {actionErrorMessage ? (
+              <Text style={styles.errorText}>{actionErrorMessage}</Text>
             ) : null}
 
             <View style={styles.footerRow}>
@@ -151,7 +190,7 @@ export function AddJourneyModal({
                 {isSaving ? (
                   <ActivityIndicator size="small" color={Colors.textInverse} />
                 ) : (
-                  <Text style={styles.submitBtnText}>Upload Journey</Text>
+                  <Text style={styles.submitBtnText}>{submitText}</Text>
                 )}
               </Pressable>
             </View>
@@ -252,6 +291,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingRight: 10,
   },
+  previewItem: {
+    width: 64,
+    height: 64,
+  },
   previewImage: {
     width: 64,
     height: 64,
@@ -259,6 +302,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderSubtle,
     backgroundColor: Colors.surfaceLight,
+  },
+  removePhotoBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removePhotoBtnText: {
+    color: Colors.textInverse,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
   },
   errorText: {
     marginTop: 4,

@@ -8,15 +8,63 @@ import {
   Modal,
   Pressable,
   Animated,
+  Alert,
 } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { JourneyDetailPresenter } from '../presenter/JourneyDetailPresenter';
+import { AddJourneyModal } from './AddJourneyModal';
 
 const HERO_STORY_INTERVAL_MS = 1400;
+const EMPTY_EDIT_FORM = {
+  destination: '',
+  country: '',
+  startDate: '',
+  endDate: '',
+  spent: '',
+  places: '',
+  visitedLocations: '',
+  dailyExpenses: '',
+  existingPhotoUrls: [],
+  localPhotoUris: [],
+};
+
+function toCommaSeparatedText(list) {
+  if (!Array.isArray(list) || !list.length) return '';
+  return list.join(', ');
+}
+
+function createEditForm(journey) {
+  if (!journey) return EMPTY_EDIT_FORM;
+  return {
+    destination: journey.destination || '',
+    country: journey.country || '',
+    startDate: journey.startDate || '',
+    endDate: journey.endDate || '',
+    spent: String(journey.spent ?? ''),
+    places: String(journey.places ?? ''),
+    visitedLocations: toCommaSeparatedText(journey.visitedLocations),
+    dailyExpenses: toCommaSeparatedText(journey.dailyExpenses),
+    existingPhotoUrls: Array.isArray(journey.photoMemories)
+      ? journey.photoMemories.filter(Boolean)
+      : [],
+    localPhotoUris: [],
+  };
+}
+
+function resolveImageMediaTypes() {
+  if (ImagePicker.MediaTypeOptions?.Images !== undefined) {
+    return ImagePicker.MediaTypeOptions.Images;
+  }
+  if (ImagePicker.MediaType?.Images) {
+    return [ImagePicker.MediaType.Images];
+  }
+  return ['images'];
+}
 
 function DailyExpenseBars({ values }) {
   const max = values.length > 0 ? Math.max(...values) : 1;
@@ -49,6 +97,8 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const [heroFrameIndex, setHeroFrameIndex] = useState(0);
   const [previewPhotoUri, setPreviewPhotoUri] = useState('');
   const [isPreviewVisible, setPreviewVisible] = useState(false);
+  const [isEditModalVisible, setEditModalVisible] = useState(false);
+  const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
   const params = useLocalSearchParams();
   const journeyIdParam = Array.isArray(params.journeyId)
     ? params.journeyId[0]
@@ -90,6 +140,8 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
 
   const loadStatus = JourneyDetailPresenter.getLoadStatus();
   const errorMessage = JourneyDetailPresenter.getErrorMessage();
+  const updateStatus = JourneyDetailPresenter.getUpdateStatus();
+  const updateErrorMessage = JourneyDetailPresenter.getUpdateErrorMessage();
   const journey = JourneyDetailPresenter.getJourneyById(journeyId);
   const visitedLocations = journey?.visitedLocations || [];
   const dailyExpenses = journey?.dailyExpenses || [];
@@ -112,7 +164,16 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     setHeroFrameIndex(0);
     setPreviewVisible(false);
     setPreviewPhotoUri('');
+    setEditModalVisible(false);
+    JourneyDetailPresenter.resetUpdateState();
   }, [journey?.id, heroStoryFrames.length]);
+
+  useEffect(() => {
+    if (updateStatus === 'success') {
+      setEditModalVisible(false);
+      JourneyDetailPresenter.resetUpdateState();
+    }
+  }, [updateStatus]);
 
   useEffect(() => {
     if (!isHeroStoryPlaying || heroStoryFrames.length < 2) {
@@ -143,6 +204,86 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     setPreviewVisible(false);
   };
 
+  const openEditModal = () => {
+    if (!journey) return;
+    if (!journey.isPersisted) {
+      Alert.alert('Edit unavailable', 'Only uploaded journeys can be edited.');
+      return;
+    }
+    JourneyDetailPresenter.resetUpdateState();
+    setEditForm(createEditForm(journey));
+    setEditModalVisible(true);
+  };
+
+  const closeEditModal = () => {
+    if (updateStatus === 'loading') return;
+    JourneyDetailPresenter.resetUpdateState();
+    setEditModalVisible(false);
+  };
+
+  const updateEditField = (key, value) => {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const appendEditLocalPhotos = (photoUris) => {
+    if (!Array.isArray(photoUris) || !photoUris.length) return;
+    setEditForm((prev) => ({
+      ...prev,
+      localPhotoUris: [...prev.localPhotoUris, ...photoUris],
+    }));
+  };
+
+  const removeExistingPhotoAt = (index) => {
+    setEditForm((prev) => ({
+      ...prev,
+      existingPhotoUrls: prev.existingPhotoUrls.filter((_, i) => i !== index),
+    }));
+  };
+
+  const removeLocalPhotoAt = (index) => {
+    setEditForm((prev) => ({
+      ...prev,
+      localPhotoUris: prev.localPhotoUris.filter((_, i) => i !== index),
+    }));
+  };
+
+  const pickEditPhotosFromAlbum = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Photo permission required',
+          'Please allow photo library access, then tap Add Photos again.',
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: resolveImageMediaTypes(),
+        allowsMultipleSelection: true,
+        quality: 0.75,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      const selectedUris = result.assets
+        .map((asset) => asset?.uri)
+        .filter(Boolean);
+
+      if (!selectedUris.length) return;
+      appendEditLocalPhotos(selectedUris);
+    } catch (e) {
+      Alert.alert('Unable to open album', e?.message || 'Please try again.');
+    }
+  };
+
+  const submitJourneyUpdate = () => {
+    if (!journey) return;
+    JourneyDetailPresenter.onUpdateJourney({
+      id: journey.id,
+      ...editForm,
+    });
+  };
+
   return (
     <View style={styles.screen}>
       <View style={styles.topRow}>
@@ -155,8 +296,8 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
           <Text style={styles.subtitle}>{journey?.travelDates || ''}</Text>
         </View>
 
-        <Pressable style={styles.iconBtn}>
-          <Ionicons name="share-social-outline" size={18} color={Colors.textPrimary} />
+        <Pressable style={styles.iconBtn} onPress={openEditModal}>
+          <Ionicons name="create-outline" size={18} color={Colors.textPrimary} />
         </Pressable>
       </View>
 
@@ -267,6 +408,20 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
           ) : null}
         </View>
       </Modal>
+
+      <AddJourneyModal
+        visible={isEditModalVisible}
+        mode="edit"
+        form={editForm}
+        submitStatus={updateStatus}
+        submitErrorMessage={updateErrorMessage}
+        onChangeField={updateEditField}
+        onPickPhotos={pickEditPhotosFromAlbum}
+        onRemoveExistingPhoto={removeExistingPhotoAt}
+        onRemoveLocalPhoto={removeLocalPhotoAt}
+        onClose={closeEditModal}
+        onSubmit={submitJourneyUpdate}
+      />
     </View>
   );
 });

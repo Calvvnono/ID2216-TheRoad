@@ -8,10 +8,12 @@ import { signInAnonymously } from 'firebase/auth';
 import {
   addDoc,
   collection,
+  doc,
   getDocs,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
 } from 'firebase/firestore';
 import { getDownloadURL, ref } from 'firebase/storage';
 import { auth, db, storage } from '../../shared/api/firebaseClient';
@@ -176,6 +178,13 @@ function parseListNumber(input) {
     .map((n) => Math.round(n));
 }
 
+function cleanPhotoUrlList(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+}
+
 function normalizeJourney(raw, idOverride) {
   const id = idOverride || raw.id || `journey-${Date.now()}`;
   const destination = raw.destination || 'Untitled Journey';
@@ -198,9 +207,11 @@ function normalizeJourney(raw, idOverride) {
     ? raw.photoMemories.filter(Boolean)
     : [];
   const photos = toPositiveInt(raw.photos, photoMemories.length || 0);
+  const isPersisted = Boolean(raw.isPersisted);
 
   return {
     id,
+    isPersisted,
     destination,
     country,
     startDate,
@@ -261,6 +272,55 @@ function buildCreatePayload(input) {
   };
 }
 
+function buildUpdatePayload(input) {
+  const journeyId = String(input.id || input.journeyId || '').trim();
+  if (!journeyId) {
+    throw new Error('Journey id is missing.');
+  }
+
+  const destination = String(input.destination || '').trim();
+  const country = String(input.country || '').trim();
+  const startDate = String(input.startDate || '').trim();
+  const endDate = String(input.endDate || '').trim();
+  const existingPhotoUrls = cleanPhotoUrlList(input.existingPhotoUrls);
+  const localPhotoUris = cleanPhotoUrlList(input.localPhotoUris);
+
+  if (!destination || !country || !startDate || !endDate) {
+    throw new Error('Please fill destination, country, start date and end date.');
+  }
+
+  if (existingPhotoUrls.length + localPhotoUris.length < 1) {
+    throw new Error('Please keep or select at least one photo.');
+  }
+
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
+  if (!start || !end || end.getTime() < start.getTime()) {
+    throw new Error('Please provide valid dates. End date must be after start date.');
+  }
+
+  const spent = toNonNegativeNumber(input.spent, 0);
+  const places = toPositiveInt(input.places, 0);
+  const visitedLocations = parseListText(input.visitedLocations);
+  const dailyExpenses = parseListNumber(input.dailyExpenses);
+
+  return {
+    id: journeyId,
+    destination,
+    country,
+    startDate,
+    endDate,
+    travelDates: formatTravelDates(startDate, endDate),
+    durationLabel: `${durationDays(startDate, endDate)} Days`,
+    spent,
+    places,
+    existingPhotoUrls,
+    localPhotoUris,
+    visitedLocations: visitedLocations.length ? visitedLocations : [destination],
+    dailyExpenses: dailyExpenses.length ? dailyExpenses : [Math.max(1, Math.round(spent))],
+  };
+}
+
 async function ensureUid() {
   if (auth.currentUser?.uid) return auth.currentUser.uid;
   const cred = await signInAnonymously(auth);
@@ -314,12 +374,16 @@ export const JourneysService = {
       const snap = await getDocs(
         query(journeysRef(resolvedUid), orderBy('createdAt', 'desc')),
       );
-      firebaseJourneys = snap.docs.map((d) => normalizeJourney(d.data(), d.id));
+      firebaseJourneys = snap.docs.map((d) =>
+        normalizeJourney({ ...d.data(), isPersisted: true }, d.id),
+      );
     } catch (e) {
       console.warn('Journeys Firebase fetch failed. Showing mock data only:', e.message);
     }
 
-    const mockJourneys = MOCK_JOURNEYS.map((item) => normalizeJourney(item, item.id));
+    const mockJourneys = MOCK_JOURNEYS.map((item) =>
+      normalizeJourney({ ...item, isPersisted: false }, item.id),
+    );
     return [...firebaseJourneys, ...mockJourneys];
   },
 
@@ -357,6 +421,46 @@ export const JourneysService = {
       updatedAt: serverTimestamp(),
     });
 
-    return normalizeJourney(writePayload, docRef.id);
+    return normalizeJourney({ ...writePayload, isPersisted: true }, docRef.id);
+  },
+
+  async updateJourney(input) {
+    const resolvedUid = await ensureUid();
+    const payload = buildUpdatePayload(input);
+    const uploadedPhotoUrls = payload.localPhotoUris.length
+      ? await uploadJourneyPhotos(payload.localPhotoUris, resolvedUid)
+      : [];
+
+    const photoMemories = [...payload.existingPhotoUrls, ...uploadedPhotoUrls];
+    const coverPhoto = photoMemories[0] || FALLBACK_IMAGE;
+
+    const writePayload = {
+      destination: payload.destination,
+      country: payload.country,
+      startDate: payload.startDate,
+      endDate: payload.endDate,
+      travelDates: payload.travelDates,
+      durationLabel: payload.durationLabel,
+      spent: payload.spent,
+      photos: photoMemories.length,
+      places: payload.places,
+      imageUrl: coverPhoto,
+      detailHeroImage: coverPhoto,
+      visitedLocations: payload.visitedLocations,
+      dailyExpenses: payload.dailyExpenses,
+      photoMemories,
+    };
+
+    const refDoc = doc(db, `users/${resolvedUid}/journeys/${payload.id}`);
+    await setDoc(
+      refDoc,
+      {
+        ...writePayload,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    return normalizeJourney({ ...writePayload, isPersisted: true }, payload.id);
   },
 };
