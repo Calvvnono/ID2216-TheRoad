@@ -18,7 +18,6 @@ const EMPTY_FORM = {
   places: '',
   visitedLocations: '',
   dailyExpenses: '',
-  existingPhotoUrls: [],
   localPhotoUris: [],
 };
 

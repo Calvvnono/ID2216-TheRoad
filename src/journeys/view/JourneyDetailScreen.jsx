@@ -206,10 +206,6 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
 
   const openEditModal = () => {
     if (!journey) return;
-    if (!journey.isPersisted) {
-      Alert.alert('Edit unavailable', 'Only uploaded journeys can be edited.');
-      return;
-    }
     JourneyDetailPresenter.resetUpdateState();
     setEditForm(createEditForm(journey));
     setEditModalVisible(true);

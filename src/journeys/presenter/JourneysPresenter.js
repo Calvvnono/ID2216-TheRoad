@@ -13,16 +13,8 @@ export const JourneysPresenter = {
     journeysStore.createJourney(input);
   },
 
-  onUpdateJourney(input) {
-    journeysStore.updateJourney(input);
-  },
-
   resetCreateState() {
     journeysStore.resetCreateState();
-  },
-
-  resetUpdateState() {
-    journeysStore.resetUpdateState();
   },
 
   getLoadStatus() {
@@ -39,14 +31,6 @@ export const JourneysPresenter = {
 
   getCreateErrorMessage() {
     return journeysStore.createErrorMessage;
-  },
-
-  getUpdateStatus() {
-    return journeysStore.updateStatus;
-  },
-
-  getUpdateErrorMessage() {
-    return journeysStore.updateErrorMessage;
   },
 
   getJourneys() {

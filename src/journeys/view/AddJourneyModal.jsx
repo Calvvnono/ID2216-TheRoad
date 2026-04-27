@@ -32,8 +32,6 @@ export function AddJourneyModal({
   visible,
   form,
   mode = 'create',
-  createStatus,
-  createErrorMessage,
   submitStatus,
   submitErrorMessage,
   onChangeField,
@@ -43,8 +41,8 @@ export function AddJourneyModal({
   onClose,
   onSubmit,
 }) {
-  const actionStatus = submitStatus || createStatus || 'idle';
-  const actionErrorMessage = submitErrorMessage || createErrorMessage;
+  const actionStatus = submitStatus || 'idle';
+  const actionErrorMessage = submitErrorMessage;
   const isSaving = actionStatus === 'loading';
   const selectedLocalPhotoUris = Array.isArray(form.localPhotoUris)
     ? form.localPhotoUris
