@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,9 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { JourneyDetailPresenter } from '../presenter/JourneyDetailPresenter';
+
+const HERO_STORY_INTERVAL_MS = 1400;
+const HERO_STORY_CROSSFADE_MS = 260;
 
 function DailyExpenseBars({ values }) {
   const max = values.length > 0 ? Math.max(...values) : 1;
@@ -42,6 +45,10 @@ function DailyExpenseBars({ values }) {
 export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const router = useRouter();
   const entryAnim = useRef(new Animated.Value(0)).current;
+  const heroStoryFade = useRef(new Animated.Value(0)).current;
+  const [isHeroStoryPlaying, setHeroStoryPlaying] = useState(false);
+  const [heroFrameIndex, setHeroFrameIndex] = useState(0);
+  const [heroNextFrameIndex, setHeroNextFrameIndex] = useState(0);
   const params = useLocalSearchParams();
   const journeyIdParam = Array.isArray(params.journeyId)
     ? params.journeyId[0]
@@ -88,6 +95,58 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const dailyExpenses = journey?.dailyExpenses || [];
   const photoMemories = journey?.photoMemories || [];
 
+  const heroStoryFrames = useMemo(() => {
+    const memories = Array.isArray(journey?.photoMemories)
+      ? journey.photoMemories.filter(Boolean)
+      : [];
+    const fallback = [journey?.detailHeroImage, journey?.imageUrl].filter(Boolean);
+    const frames = memories.length ? memories : fallback;
+    return frames.length ? frames : [''];
+  }, [journey?.id, journey?.detailHeroImage, journey?.imageUrl, journey?.photoMemories]);
+
+  const canPlayHeroStory = heroStoryFrames.length > 1;
+  const currentHeroFrame = heroStoryFrames[heroFrameIndex] || journey?.detailHeroImage || '';
+  const nextHeroFrame = heroStoryFrames[heroNextFrameIndex] || currentHeroFrame;
+
+  useEffect(() => {
+    setHeroStoryPlaying(false);
+    setHeroFrameIndex(0);
+    setHeroNextFrameIndex(heroStoryFrames.length > 1 ? 1 : 0);
+    heroStoryFade.setValue(0);
+  }, [journey?.id, heroStoryFrames.length, heroStoryFade]);
+
+  useEffect(() => {
+    if (!isHeroStoryPlaying || heroStoryFrames.length < 2) {
+      return undefined;
+    }
+
+    const next = (heroFrameIndex + 1) % heroStoryFrames.length;
+    const timer = setTimeout(() => {
+      setHeroNextFrameIndex(next);
+      heroStoryFade.setValue(0);
+      const animation = Animated.timing(heroStoryFade, {
+        toValue: 1,
+        duration: HERO_STORY_CROSSFADE_MS,
+        useNativeDriver: true,
+      });
+
+      animation.start(({ finished }) => {
+        if (!finished) return;
+        setHeroFrameIndex(next);
+        heroStoryFade.setValue(0);
+      });
+    }, HERO_STORY_INTERVAL_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [isHeroStoryPlaying, heroFrameIndex, heroStoryFrames.length, heroStoryFade]);
+
+  const toggleHeroStoryPlayback = () => {
+    if (!canPlayHeroStory) return;
+    setHeroStoryPlaying((prev) => !prev);
+  };
+
   return (
     <View style={styles.screen}>
       <View style={styles.topRow}>
@@ -118,11 +177,28 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.heroWrap}>
-                <Image source={{ uri: journey.detailHeroImage }} style={styles.heroImage} />
+                <Image source={{ uri: currentHeroFrame }} style={styles.heroImage} />
+                {canPlayHeroStory ? (
+                  <Animated.Image
+                    source={{ uri: nextHeroFrame }}
+                    style={[styles.heroImage, { opacity: heroStoryFade }]}
+                  />
+                ) : null}
                 <View style={styles.heroOverlay} />
-                <View style={styles.playBtn}>
-                  <Ionicons name="play" size={26} color={Colors.textPrimary} />
-                </View>
+                <Pressable
+                  style={[
+                    styles.playBtn,
+                    !canPlayHeroStory && styles.playBtnDisabled,
+                  ]}
+                  onPress={toggleHeroStoryPlayback}
+                  disabled={!canPlayHeroStory}
+                >
+                  <Ionicons
+                    name={isHeroStoryPlaying ? 'pause' : 'play'}
+                    size={26}
+                    color={Colors.textPrimary}
+                  />
+                </Pressable>
               </View>
 
               <View style={styles.sectionCard}>
@@ -253,6 +329,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.32)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  playBtnDisabled: {
+    opacity: 0.55,
   },
   sectionCard: {
     marginTop: 14,

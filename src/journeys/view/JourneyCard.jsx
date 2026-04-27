@@ -1,12 +1,14 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Image, Pressable, StyleSheet, Animated } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../shared/theme/colors';
 
 const BAR_PATTERN = [
   10, 22, 16, 26, 12, 20, 30, 16, 24, 18,
   26, 14, 20, 28, 12, 22, 16, 24, 10, 18,
 ];
+const STORY_INTERVAL_MS = 1300;
+const STORY_CROSSFADE_MS = 260;
 
 function StatBox({ label, value }) {
   return (
@@ -20,6 +22,55 @@ function StatBox({ label, value }) {
 export function JourneyCard({ journey, onPress }) {
   const cardScale = useRef(new Animated.Value(1)).current;
   const cardOpacity = useRef(new Animated.Value(1)).current;
+  const storyFade = useRef(new Animated.Value(0)).current;
+  const [isStoryPlaying, setStoryPlaying] = useState(false);
+  const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
+  const [nextFrameIndex, setNextFrameIndex] = useState(0);
+
+  const storyFrames = useMemo(() => {
+    const fromMemories = Array.isArray(journey.photoMemories)
+      ? journey.photoMemories.filter(Boolean)
+      : [];
+    const fallback = journey.imageUrl ? [journey.imageUrl] : [];
+    const frames = fromMemories.length ? fromMemories : fallback;
+    return frames.length ? frames : [''];
+  }, [journey.imageUrl, journey.photoMemories]);
+
+  const canPlayStory = storyFrames.length > 1;
+
+  useEffect(() => {
+    setStoryPlaying(false);
+    setCurrentFrameIndex(0);
+    setNextFrameIndex(storyFrames.length > 1 ? 1 : 0);
+    storyFade.setValue(0);
+  }, [journey.id, storyFrames.length, storyFade]);
+
+  useEffect(() => {
+    if (!isStoryPlaying || storyFrames.length < 2) {
+      return undefined;
+    }
+
+    const next = (currentFrameIndex + 1) % storyFrames.length;
+    const timer = setTimeout(() => {
+      setNextFrameIndex(next);
+      storyFade.setValue(0);
+      const animation = Animated.timing(storyFade, {
+        toValue: 1,
+        duration: STORY_CROSSFADE_MS,
+        useNativeDriver: true,
+      });
+
+      animation.start(({ finished }) => {
+        if (!finished) return;
+        setCurrentFrameIndex(next);
+        storyFade.setValue(0);
+      });
+    }, STORY_INTERVAL_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [isStoryPlaying, currentFrameIndex, storyFrames.length, storyFade]);
 
   const handlePress = () => {
     Animated.sequence([
@@ -52,6 +103,15 @@ export function JourneyCard({ journey, onPress }) {
     });
   };
 
+  const toggleStoryPlayback = (event) => {
+    event?.stopPropagation?.();
+    if (!canPlayStory) return;
+    setStoryPlaying((prev) => !prev);
+  };
+
+  const currentFrame = storyFrames[currentFrameIndex] || journey.imageUrl;
+  const nextFrame = storyFrames[nextFrameIndex] || currentFrame;
+
   return (
     <Pressable onPress={handlePress}>
       <Animated.View
@@ -63,7 +123,16 @@ export function JourneyCard({ journey, onPress }) {
           },
         ]}
       >
-        <Image source={{ uri: journey.imageUrl }} style={styles.backgroundImage} />
+        <Image source={{ uri: currentFrame }} style={styles.backgroundImage} />
+        {canPlayStory ? (
+          <Animated.Image
+            source={{ uri: nextFrame }}
+            style={[
+              styles.backgroundImage,
+              { opacity: storyFade },
+            ]}
+          />
+        ) : null}
         <View style={styles.overlay} />
 
         <View style={styles.content}>
@@ -73,12 +142,30 @@ export function JourneyCard({ journey, onPress }) {
               <Text style={styles.country}>{journey.country}</Text>
             </View>
 
-            <View style={styles.iconBubble}>
-              <MaterialCommunityIcons
-                name="airplane"
-                size={18}
-                color={Colors.primary}
-              />
+            <View style={styles.topActions}>
+              <Pressable
+                style={[
+                  styles.iconBubble,
+                  styles.storyControl,
+                  !canPlayStory && styles.storyControlDisabled,
+                ]}
+                onPress={toggleStoryPlayback}
+                disabled={!canPlayStory}
+              >
+                <Ionicons
+                  name={isStoryPlaying ? 'pause' : 'play'}
+                  size={16}
+                  color={Colors.primary}
+                />
+              </Pressable>
+
+              <View style={styles.iconBubble}>
+                <MaterialCommunityIcons
+                  name="airplane"
+                  size={18}
+                  color={Colors.primary}
+                />
+              </View>
             </View>
           </View>
 
@@ -146,6 +233,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   destination: {
     fontSize: 36,
     fontWeight: '300',
@@ -165,6 +257,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.borderMedium,
+  },
+  storyControl: {
+    backgroundColor: 'rgba(0, 212, 255, 0.18)',
+  },
+  storyControlDisabled: {
+    opacity: 0.5,
   },
   metaRow: {
     marginTop: 12,
