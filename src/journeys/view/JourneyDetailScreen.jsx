@@ -112,6 +112,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const [previewPhotoUri, setPreviewPhotoUri] = useState('');
   const [isPreviewVisible, setPreviewVisible] = useState(false);
   const [isEditModalVisible, setEditModalVisible] = useState(false);
+  const [hasRequestedBgm, setHasRequestedBgm] = useState(false);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
   const params = useLocalSearchParams();
   const journeyIdParam = Array.isArray(params.journeyId)
@@ -157,12 +158,10 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const updateStatus = JourneyDetailPresenter.getUpdateStatus();
   const updateErrorMessage = JourneyDetailPresenter.getUpdateErrorMessage();
   const journey = JourneyDetailPresenter.getJourneyById(journeyId);
-  const bgmStatus = JourneyDetailPresenter.getBgmStatus(journeyId);
-  const bgmErrorMessage = JourneyDetailPresenter.getBgmErrorMessage(journeyId);
-  const bgmTrack = JourneyDetailPresenter.getBgmTrack(journeyId);
   const visitedLocations = journey?.visitedLocations || [];
   const dailyExpenses = journey?.dailyExpenses || [];
   const photoMemories = journey?.photoMemories || [];
+  const bgmPreviewUrl = journey?.bgmTrack?.previewUrl || '';
 
   const heroStoryFrames = useMemo(() => {
     const memories = Array.isArray(journey?.photoMemories)
@@ -182,8 +181,15 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     setPreviewVisible(false);
     setPreviewPhotoUri('');
     setEditModalVisible(false);
+    setHasRequestedBgm(false);
     JourneyDetailPresenter.resetUpdateState();
   }, [journey?.id, heroStoryFrames.length]);
+
+  useEffect(() => {
+    if (!isHeroStoryPlaying) {
+      setHasRequestedBgm(false);
+    }
+  }, [isHeroStoryPlaying]);
 
   useEffect(() => {
     if (updateStatus === 'success') {
@@ -205,6 +211,15 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
       clearInterval(timer);
     };
   }, [isHeroStoryPlaying, heroStoryFrames.length]);
+
+  useEffect(() => {
+    if (!isHeroStoryPlaying || bgmPreviewUrl || hasRequestedBgm || !journey?.id) {
+      return;
+    }
+
+    JourneyDetailPresenter.ensureBgmTrack(journey.id);
+    setHasRequestedBgm(true);
+  }, [isHeroStoryPlaying, bgmPreviewUrl, hasRequestedBgm, journey?.id]);
 
   const unloadBgmSound = useCallback(async () => {
     const sound = bgmSoundRef.current;
@@ -262,12 +277,6 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   }, [unloadBgmSound]);
 
   useEffect(() => {
-    if (!isHeroStoryPlaying || !journey?.id) return;
-    if (bgmStatus !== 'idle') return;
-    JourneyDetailPresenter.onMatchBgm(journey.id);
-  }, [isHeroStoryPlaying, journey?.id, bgmStatus]);
-
-  useEffect(() => {
     let cancelled = false;
 
     const syncBgmPlayback = async () => {
@@ -276,10 +285,10 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
         return;
       }
 
-      if (!bgmTrack?.previewUrl) return;
+      if (!bgmPreviewUrl) return;
 
       try {
-        await playBgmSound(bgmTrack.previewUrl);
+        await playBgmSound(bgmPreviewUrl);
       } catch (e) {
         if (!cancelled) {
           console.warn('Failed to play BGM:', e?.message || e);
@@ -291,7 +300,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [isHeroStoryPlaying, bgmTrack?.previewUrl, pauseBgmSound, playBgmSound]);
+  }, [isHeroStoryPlaying, bgmPreviewUrl, pauseBgmSound, playBgmSound]);
 
   useEffect(() => {
     unloadBgmSound();
@@ -438,27 +447,6 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
                     color={Colors.textPrimary}
                   />
                 </Pressable>
-              </View>
-
-              <View style={styles.bgmCard}>
-                <Text style={styles.bgmTitle}>Auto BGM</Text>
-                {bgmStatus === 'loading' ? (
-                  <Text style={styles.bgmText}>Matching soundtrack for this journey...</Text>
-                ) : null}
-
-                {bgmTrack?.previewUrl ? (
-                  <>
-                    <Text style={styles.bgmTrackText}>
-                      {bgmTrack.trackName} - {bgmTrack.artistName}
-                    </Text>
-                    <Text style={styles.bgmText}>Source: {bgmTrack.source}</Text>
-                    <Text style={styles.bgmText}>Matched by: {bgmTrack.matchedBy}</Text>
-                  </>
-                ) : null}
-
-                {(bgmStatus === 'empty' || bgmStatus === 'error') && !bgmTrack?.previewUrl ? (
-                  <Text style={styles.bgmText}>{bgmErrorMessage || 'No matching BGM preview found.'}</Text>
-                ) : null}
               </View>
 
               <View style={styles.sectionCard}>
@@ -632,31 +620,6 @@ const styles = StyleSheet.create({
   },
   playBtnDisabled: {
     opacity: 0.55,
-  },
-  bgmCard: {
-    marginTop: 12,
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.borderDefault,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  bgmTitle: {
-    color: Colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  bgmTrackText: {
-    marginTop: 6,
-    color: Colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  bgmText: {
-    marginTop: 4,
-    color: Colors.textSecondary,
-    fontSize: 12,
   },
   sectionCard: {
     marginTop: 14,

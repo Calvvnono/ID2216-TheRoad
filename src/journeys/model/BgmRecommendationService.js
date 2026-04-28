@@ -1,4 +1,6 @@
-const ITUNES_SEARCH_ENDPOINT = 'https://itunes.apple.com/search';
+const JAMENDO_TRACKS_ENDPOINT = 'https://api.jamendo.com/v3.0/tracks';
+const JAMENDO_CLIENT_ID = process.env.EXPO_PUBLIC_JAMENDO_CLIENT_ID || '';
+const JAMENDO_AUDIO_FORMAT = 'mp32';
 const QUERY_COUNT_LIMIT = 6;
 const QUERY_RESULT_LIMIT = 18;
 
@@ -72,6 +74,13 @@ const LOW_ENERGY_WORDS = [
   'slow',
   'meditation',
 ];
+
+function getJamendoClientId() {
+  if (!JAMENDO_CLIENT_ID) {
+    throw new Error('Jamendo client id is not configured.');
+  }
+  return JAMENDO_CLIENT_ID;
+}
 
 function normalizeTokenList(value) {
   if (!value) return [];
@@ -212,35 +221,95 @@ function buildQueryTerms(journey, profile) {
   ).slice(0, QUERY_COUNT_LIMIT);
 }
 
+function getJamendoTags(track) {
+  const tags = [];
+  const musicinfo = track?.musicinfo || {};
+  const tagGroups = musicinfo.tags || {};
+
+  if (Array.isArray(tagGroups.genres)) tags.push(...tagGroups.genres);
+  if (Array.isArray(tagGroups.instruments)) tags.push(...tagGroups.instruments);
+  if (Array.isArray(tagGroups.vartags)) tags.push(...tagGroups.vartags);
+  if (musicinfo.vocalinstrumental) tags.push(musicinfo.vocalinstrumental);
+  if (musicinfo.acousticelectric) tags.push(musicinfo.acousticelectric);
+  if (musicinfo.speed) tags.push(musicinfo.speed);
+
+  return tags
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function speedScore(speed) {
+  if (speed === 'veryhigh') return 2;
+  if (speed === 'high') return 1;
+  if (speed === 'low') return -1;
+  if (speed === 'verylow') return -2;
+  return 0;
+}
+
 async function fetchTracksByQuery(queryTerm) {
+  const clientId = getJamendoClientId();
+  console.log(`[DEBUG] 实际读取到的 Client ID 是: >>>${clientId}<<<，长度: ${clientId.length}`);
   const params = new URLSearchParams({
-    term: queryTerm,
-    media: 'music',
-    entity: 'song',
+    client_id: clientId,
+    format: 'json',
     limit: String(QUERY_RESULT_LIMIT),
+    search: queryTerm,
+    order: 'relevance',
+    audioformat: JAMENDO_AUDIO_FORMAT,
+    include: 'musicinfo',
   });
 
-  const response = await fetch(`${ITUNES_SEARCH_ENDPOINT}?${params.toString()}`);
+  console.debug('[BGM] Jamendo search:', queryTerm);
+
+  let response;
+  try {
+    response = await fetch(`${JAMENDO_TRACKS_ENDPOINT}?${params.toString()}`);
+  } catch (error) {
+    console.warn('[BGM] Jamendo search request failed:', queryTerm, error?.message || error);
+    throw error;
+  }
+
   if (!response.ok) {
+    console.warn('[BGM] Jamendo API request failed:', {
+      query: queryTerm,
+      status: response.status,
+      statusText: response.statusText,
+    });
     throw new Error(`BGM API request failed (${response.status})`);
   }
 
   const payload = await response.json();
-  const results = Array.isArray(payload?.results) ? payload.results : [];
+  const status = payload?.headers?.status || '';
+  const errorMessage = payload?.headers?.error_message || '';
+  if (status && status !== 'success') {
+    console.warn('[BGM] Jamendo API error:', {
+      query: queryTerm,
+      status,
+      errorMessage,
+    });
+    throw new Error(errorMessage || 'Jamendo API error.');
+  }
 
-  return results.filter((item) => typeof item.previewUrl === 'string' && item.previewUrl);
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  const previewResults = results.filter(
+    (item) => typeof item.audio === 'string' && item.audio,
+  );
+  console.debug('[BGM] Jamendo search results:', {
+    query: queryTerm,
+    total: results.length,
+    withPreview: previewResults.length,
+  });
+  return previewResults;
 }
 
 function scoreTrack(track, profile, queryIndex) {
-  const genreText = String(track.primaryGenreName || '').toLowerCase();
-  const text = [
-    track.trackName,
-    track.artistName,
-    track.collectionName,
-    track.primaryGenreName,
-  ]
+  const artistName = String(track.artist_name || '');
+  const albumName = String(track.album_name || '');
+  const tags = getJamendoTags(track);
+  const text = [track.name, artistName, albumName, ...tags]
     .map((item) => String(item || '').toLowerCase())
     .join(' ');
+  const genreText = tags.join(' ');
 
   let score = 0;
   score += tokenScore(genreText, profile.preferredGenres, 14, 2);
@@ -257,13 +326,9 @@ function scoreTrack(track, profile, queryIndex) {
 
   const estimatedEnergy = estimateEnergyLevel(text);
   score += 12 - Math.abs(profile.energyLevel - estimatedEnergy) * 3;
+  score += speedScore(String(track?.musicinfo?.speed || '').toLowerCase());
 
-  const explicitness = String(track.trackExplicitness || '').toLowerCase();
-  if (explicitness.includes('explicit')) {
-    score -= 8;
-  }
-
-  if (text.includes('instrumental')) {
+  if (tags.includes('instrumental')) {
     score += 3;
   }
 
@@ -272,14 +337,21 @@ function scoreTrack(track, profile, queryIndex) {
 }
 
 function normalizeMatchedTrack(track, queryTerm, score) {
+  const artistName = track.artist_name || 'Unknown Artist';
+  const artworkUrl = track.image || track.album_image || '';
+  const genre = Array.isArray(track?.musicinfo?.tags?.genres)
+    ? track.musicinfo.tags.genres[0]
+    : '';
+
   return {
-    id: String(track.trackId || track.previewUrl),
-    trackName: track.trackName || 'Unknown Track',
-    artistName: track.artistName || 'Unknown Artist',
-    genre: track.primaryGenreName || '',
-    previewUrl: track.previewUrl,
-    artworkUrl: track.artworkUrl100 || track.artworkUrl60 || '',
-    source: 'Apple Music Preview',
+    id: String(track.id || track.audio),
+    trackName: track.name || 'Unknown Track',
+    artistName,
+    genre,
+    previewUrl: track.audio,
+    artworkUrl,
+    source: 'Jamendo',
+    externalUrl: track.shareurl || track.shorturl || '',
     matchedBy: queryTerm,
     matchScore: Math.round(score * 100) / 100,
   };
@@ -306,7 +378,7 @@ export const BgmRecommendationService = {
       }
 
       tracks.forEach((track) => {
-        const id = String(track.trackId || track.previewUrl || '');
+        const id = String(track.id || track.audio || '');
         if (!id || seenTrackIds.has(id)) return;
 
         seenTrackIds.add(id);

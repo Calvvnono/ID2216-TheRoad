@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { getDownloadURL, ref } from 'firebase/storage';
 import { auth, db, storage } from '../../shared/api/firebaseClient';
+import { BgmRecommendationService } from './BgmRecommendationService';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1507608616759-54f48f0af0ee?w=1200&h=700&fit=crop';
@@ -107,11 +108,35 @@ function parseListNumber(input) {
     .map((n) => Math.round(n));
 }
 
+function buildBgmMatchInput(source) {
+  if (!source) return null;
+  return {
+    destination: source.destination,
+    country: source.country,
+    startDate: source.startDate,
+    visitedLocations: source.visitedLocations,
+    bgmMoodTags: source.bgmMoodTags,
+    bgmActivityTags: source.bgmActivityTags,
+    bgmPreferredGenres: source.bgmPreferredGenres,
+    bgmCustomKeywords: source.bgmCustomKeywords,
+    bgmEnergyLevel: source.bgmEnergyLevel,
+  };
+}
+
 function cleanPhotoUrlList(value) {
   if (!Array.isArray(value)) return [];
   return value
     .map((item) => String(item || '').trim())
     .filter(Boolean);
+}
+
+async function matchBgmSafe(journeySnapshot) {
+  try {
+    return await BgmRecommendationService.recommendJourneyBgm(journeySnapshot);
+  } catch (e) {
+    console.warn('BGM match failed:', e?.message || e);
+    return null;
+  }
 }
 
 function normalizeJourney(raw, idOverride) {
@@ -136,6 +161,12 @@ function normalizeJourney(raw, idOverride) {
     ? raw.photoMemories.filter(Boolean)
     : [];
   const photos = toPositiveInt(raw.photos, photoMemories.length || 0);
+  const rawBgmTrack = raw?.bgmTrack || null;
+  const bgmTrack = rawBgmTrack?.previewUrl
+    ? rawBgmTrack
+    : rawBgmTrack?.preview_url
+      ? { ...rawBgmTrack, previewUrl: rawBgmTrack.preview_url }
+      : null;
   const bgmMoodTags = Array.isArray(raw.bgmMoodTags)
     ? raw.bgmMoodTags.filter(Boolean)
     : [];
@@ -171,6 +202,7 @@ function normalizeJourney(raw, idOverride) {
     bgmPreferredGenres,
     bgmCustomKeywords,
     bgmEnergyLevel,
+    bgmTrack,
   };
 }
 
@@ -348,6 +380,17 @@ export const JourneysService = {
 
     const photoMemories = uploadedPhotoUrls;
     const coverPhoto = uploadedPhotoUrls[0] || FALLBACK_IMAGE;
+    const bgmTrack = await matchBgmSafe({
+      destination: payload.destination,
+      country: payload.country,
+      startDate: payload.startDate,
+      visitedLocations: payload.visitedLocations,
+      bgmMoodTags: payload.bgmMoodTags,
+      bgmActivityTags: payload.bgmActivityTags,
+      bgmPreferredGenres: payload.bgmPreferredGenres,
+      bgmCustomKeywords: payload.bgmCustomKeywords,
+      bgmEnergyLevel: payload.bgmEnergyLevel,
+    });
 
     const writePayload = {
       destination: payload.destination,
@@ -369,6 +412,7 @@ export const JourneysService = {
       bgmPreferredGenres: payload.bgmPreferredGenres,
       bgmCustomKeywords: payload.bgmCustomKeywords,
       bgmEnergyLevel: payload.bgmEnergyLevel,
+      bgmTrack: bgmTrack || null,
     };
 
     const docRef = await addDoc(journeysRef(resolvedUid), {
@@ -389,6 +433,17 @@ export const JourneysService = {
 
     const photoMemories = [...payload.existingPhotoUrls, ...uploadedPhotoUrls];
     const coverPhoto = photoMemories[0] || FALLBACK_IMAGE;
+    const bgmTrack = await matchBgmSafe({
+      destination: payload.destination,
+      country: payload.country,
+      startDate: payload.startDate,
+      visitedLocations: payload.visitedLocations,
+      bgmMoodTags: payload.bgmMoodTags,
+      bgmActivityTags: payload.bgmActivityTags,
+      bgmPreferredGenres: payload.bgmPreferredGenres,
+      bgmCustomKeywords: payload.bgmCustomKeywords,
+      bgmEnergyLevel: payload.bgmEnergyLevel,
+    });
 
     const writePayload = {
       destination: payload.destination,
@@ -410,6 +465,7 @@ export const JourneysService = {
       bgmPreferredGenres: payload.bgmPreferredGenres,
       bgmCustomKeywords: payload.bgmCustomKeywords,
       bgmEnergyLevel: payload.bgmEnergyLevel,
+      bgmTrack: bgmTrack || null,
     };
 
     const refDoc = doc(db, `users/${resolvedUid}/journeys/${payload.id}`);
@@ -423,5 +479,30 @@ export const JourneysService = {
     );
 
     return normalizeJourney(writePayload, payload.id);
+  },
+
+  async ensureBgmTrack(journey) {
+    const journeyId = String(journey?.id || journey?.journeyId || '').trim();
+    if (!journeyId) return null;
+    if (journey?.bgmTrack?.previewUrl) return journey;
+
+    const matchInput = buildBgmMatchInput(journey);
+    if (!matchInput) return journey;
+
+    const bgmTrack = await matchBgmSafe(matchInput);
+    if (!bgmTrack) return journey;
+
+    const resolvedUid = await ensureUid();
+    const refDoc = doc(db, `users/${resolvedUid}/journeys/${journeyId}`);
+    await setDoc(
+      refDoc,
+      {
+        bgmTrack,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    return normalizeJourney({ ...journey, bgmTrack }, journeyId);
   },
 };
