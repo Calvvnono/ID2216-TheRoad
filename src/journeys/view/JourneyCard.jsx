@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { View, Text, Image, Pressable, StyleSheet, Animated } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../shared/theme/colors';
@@ -20,6 +20,16 @@ function StatBox({ label, value }) {
 export function JourneyCard({ journey, onPress }) {
   const cardScale = useRef(new Animated.Value(1)).current;
   const cardOpacity = useRef(new Animated.Value(1)).current;
+
+  const storyFrames = useMemo(() => {
+    const fromMemories = Array.isArray(journey.photoMemories)
+      ? journey.photoMemories.filter(Boolean)
+      : [];
+    const fallback = journey.imageUrl ? [journey.imageUrl] : [];
+    const frames = fromMemories.length ? fromMemories : fallback;
+    return frames.length ? frames : [''];
+  }, [journey.imageUrl, journey.photoMemories]);
+
 
   const handlePress = () => {
     Animated.sequence([
@@ -52,6 +62,8 @@ export function JourneyCard({ journey, onPress }) {
     });
   };
 
+  const currentFrame = storyFrames[0] || journey.imageUrl;
+
   return (
     <Pressable onPress={handlePress}>
       <Animated.View
@@ -63,7 +75,7 @@ export function JourneyCard({ journey, onPress }) {
           },
         ]}
       >
-        <Image source={{ uri: journey.imageUrl }} style={styles.backgroundImage} />
+        <Image source={{ uri: currentFrame }} style={styles.backgroundImage} />
         <View style={styles.overlay} />
 
         <View style={styles.content}>
@@ -73,12 +85,14 @@ export function JourneyCard({ journey, onPress }) {
               <Text style={styles.country}>{journey.country}</Text>
             </View>
 
-            <View style={styles.iconBubble}>
-              <MaterialCommunityIcons
-                name="airplane"
-                size={18}
-                color={Colors.primary}
-              />
+            <View style={styles.topActions}>
+              <View style={styles.iconBubble}>
+                <MaterialCommunityIcons
+                  name="airplane"
+                  size={18}
+                  color={Colors.primary}
+                />
+              </View>
             </View>
           </View>
 
@@ -145,6 +159,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   destination: {
     fontSize: 36,

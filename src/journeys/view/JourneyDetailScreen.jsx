@@ -1,19 +1,85 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Image,
+  Modal,
   Pressable,
   Animated,
+  Alert,
+  FlatList,
+  useWindowDimensions,
 } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { JourneyDetailPresenter } from '../presenter/JourneyDetailPresenter';
+import { journeyPlaybackStore } from '../model/JourneyPlaybackStore';
+import { AddJourneyModal } from './AddJourneyModal';
+
+const HERO_STORY_INTERVAL_MS = 1400;
+const BGM_VOLUME = 0.58;
+const EMPTY_EDIT_FORM = {
+  destination: '',
+  country: '',
+  startDate: '',
+  endDate: '',
+  spent: '',
+  places: '',
+  visitedLocations: '',
+  dailyExpenses: '',
+  bgmMoodTags: '',
+  bgmActivityTags: '',
+  bgmPreferredGenres: '',
+  bgmCustomKeywords: '',
+  bgmEnergyLevel: '',
+  existingPhotoUrls: [],
+  localPhotoUris: [],
+};
+
+function toCommaSeparatedText(list) {
+  if (!Array.isArray(list) || !list.length) return '';
+  return list.join(', ');
+}
+
+function createEditForm(journey) {
+  if (!journey) return EMPTY_EDIT_FORM;
+  return {
+    destination: journey.destination || '',
+    country: journey.country || '',
+    startDate: journey.startDate || '',
+    endDate: journey.endDate || '',
+    spent: String(journey.spent ?? ''),
+    places: String(journey.places ?? ''),
+    visitedLocations: toCommaSeparatedText(journey.visitedLocations),
+    dailyExpenses: toCommaSeparatedText(journey.dailyExpenses),
+    bgmMoodTags: toCommaSeparatedText(journey.bgmMoodTags),
+    bgmActivityTags: toCommaSeparatedText(journey.bgmActivityTags),
+    bgmPreferredGenres: toCommaSeparatedText(journey.bgmPreferredGenres),
+    bgmCustomKeywords: toCommaSeparatedText(journey.bgmCustomKeywords),
+    bgmEnergyLevel: String(journey.bgmEnergyLevel ?? ''),
+    existingPhotoUrls: Array.isArray(journey.photoMemories)
+      ? journey.photoMemories.filter(Boolean)
+      : [],
+    localPhotoUris: [],
+  };
+}
+
+function resolveImageMediaTypes() {
+  if (ImagePicker.MediaTypeOptions?.Images !== undefined) {
+    return ImagePicker.MediaTypeOptions.Images;
+  }
+  if (ImagePicker.MediaType?.Images) {
+    return [ImagePicker.MediaType.Images];
+  }
+  return ['images'];
+}
 
 function DailyExpenseBars({ values }) {
   const max = values.length > 0 ? Math.max(...values) : 1;
@@ -42,6 +108,22 @@ function DailyExpenseBars({ values }) {
 export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const router = useRouter();
   const entryAnim = useRef(new Animated.Value(0)).current;
+  const previewListRef = useRef(null);
+  const heroFramesRef = useRef([]);
+  const loadedHeroFramesRef = useRef({});
+  const lastLoadedHeroFrameRef = useRef('');
+  const [isHeroStoryPlaying, setHeroStoryPlaying] = useState(false);
+  const [isStoryModalVisible, setStoryModalVisible] = useState(false);
+  const [heroFrameIndex, setHeroFrameIndex] = useState(0);
+  const [loadedHeroFrames, setLoadedHeroFrames] = useState({});
+  const [lastLoadedHeroFrame, setLastLoadedHeroFrame] = useState('');
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [isPreviewVisible, setPreviewVisible] = useState(false);
+  const [isEditModalVisible, setEditModalVisible] = useState(false);
+  const [hasRequestedBgm, setHasRequestedBgm] = useState(false);
+  const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
+  const isFocused = useIsFocused();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const params = useLocalSearchParams();
   const journeyIdParam = Array.isArray(params.journeyId)
     ? params.journeyId[0]
@@ -62,10 +144,11 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   }, [entryAnim, journeyId]);
 
   const handleBack = useCallback(() => {
-    if (typeof router.canGoBack === 'function' && router.canGoBack()) {
-      router.back();
-      return;
-    }
+    setStoryModalVisible(false);
+    setHeroStoryPlaying(false);
+    setPreviewVisible(false);
+    setHeroFrameIndex(0);
+    journeyPlaybackStore.stopBgm();
     router.replace('/journeys');
   }, [router]);
 
@@ -83,10 +166,240 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
 
   const loadStatus = JourneyDetailPresenter.getLoadStatus();
   const errorMessage = JourneyDetailPresenter.getErrorMessage();
+  const updateStatus = JourneyDetailPresenter.getUpdateStatus();
+  const updateErrorMessage = JourneyDetailPresenter.getUpdateErrorMessage();
   const journey = JourneyDetailPresenter.getJourneyById(journeyId);
   const visitedLocations = journey?.visitedLocations || [];
   const dailyExpenses = journey?.dailyExpenses || [];
   const photoMemories = journey?.photoMemories || [];
+  const bgmPreviewUrl = journey?.bgmTrack?.previewUrl || '';
+  const shouldPlayBgm = isFocused && isStoryModalVisible && isHeroStoryPlaying;
+
+  const heroStoryFrames = useMemo(() => {
+    const memories = Array.isArray(journey?.photoMemories)
+      ? journey.photoMemories.filter(Boolean)
+      : [];
+    const fallback = [journey?.detailHeroImage, journey?.imageUrl].filter(Boolean);
+    const frames = memories.length ? memories : fallback;
+    return frames.length ? frames : [''];
+  }, [journey?.id, journey?.detailHeroImage, journey?.imageUrl, journey?.photoMemories]);
+
+  const canPlayHeroStory = heroStoryFrames.length > 1;
+  const currentHeroFrame = heroStoryFrames[heroFrameIndex] || journey?.detailHeroImage || '';
+
+  const markHeroFrameLoaded = useCallback((uri) => {
+    if (!uri) return;
+    if (!loadedHeroFramesRef.current[uri]) {
+      loadedHeroFramesRef.current = { ...loadedHeroFramesRef.current, [uri]: true };
+      setLoadedHeroFrames((prev) => ({ ...prev, [uri]: true }));
+    }
+    lastLoadedHeroFrameRef.current = uri;
+    setLastLoadedHeroFrame(uri);
+  }, []);
+
+  useEffect(() => {
+    heroFramesRef.current = heroStoryFrames;
+  }, [heroStoryFrames]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadedHeroFramesRef.current = {};
+    lastLoadedHeroFrameRef.current = '';
+    setLoadedHeroFrames({});
+    setLastLoadedHeroFrame('');
+
+    heroStoryFrames.filter(Boolean).forEach((uri) => {
+      Image.prefetch(uri)
+        .then((ok) => {
+          if (!ok || cancelled) return;
+          markHeroFrameLoaded(uri);
+        })
+        .catch(() => {});
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [heroStoryFrames, markHeroFrameLoaded]);
+
+  useEffect(() => {
+    setHeroStoryPlaying(false);
+    setStoryModalVisible(false);
+    setHeroFrameIndex(0);
+    setPreviewVisible(false);
+    setPreviewIndex(0);
+    setEditModalVisible(false);
+    setHasRequestedBgm(false);
+    JourneyDetailPresenter.resetUpdateState();
+  }, [journey?.id, heroStoryFrames.length]);
+
+  useEffect(() => {
+    if (!isHeroStoryPlaying) {
+      setHasRequestedBgm(false);
+    }
+  }, [isHeroStoryPlaying]);
+
+  useEffect(() => {
+    if (updateStatus === 'success') {
+      setEditModalVisible(false);
+      JourneyDetailPresenter.resetUpdateState();
+    }
+  }, [updateStatus]);
+
+  useEffect(() => {
+    if (!isHeroStoryPlaying || !isStoryModalVisible || heroStoryFrames.length < 2) {
+      return undefined;
+    }
+
+    const timer = setInterval(() => {
+      setHeroFrameIndex((prev) => (prev + 1) % heroFramesRef.current.length);
+    }, HERO_STORY_INTERVAL_MS);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [isHeroStoryPlaying, isStoryModalVisible, heroStoryFrames.length]);
+
+  useEffect(() => {
+    if (!shouldPlayBgm || bgmPreviewUrl || hasRequestedBgm || !journey?.id) {
+      return;
+    }
+
+    JourneyDetailPresenter.ensureBgmTrack(journey.id);
+    setHasRequestedBgm(true);
+  }, [shouldPlayBgm, bgmPreviewUrl, hasRequestedBgm, journey?.id]);
+
+  useEffect(() => {
+    if (!shouldPlayBgm) {
+      journeyPlaybackStore.pauseBgm();
+      return;
+    }
+    if (!bgmPreviewUrl) return;
+    journeyPlaybackStore.playBgm(bgmPreviewUrl, BGM_VOLUME);
+  }, [shouldPlayBgm, bgmPreviewUrl]);
+
+  useEffect(() => {
+    if (isFocused) return;
+    setStoryModalVisible(false);
+    setHeroStoryPlaying(false);
+    setPreviewVisible(false);
+    setHeroFrameIndex(0);
+    journeyPlaybackStore.stopBgm();
+  }, [isFocused]);
+
+  useEffect(() => {
+    journeyPlaybackStore.stopBgm();
+  }, [journey?.id]);
+
+  useEffect(() => () => {
+    journeyPlaybackStore.stopBgm();
+  }, []);
+
+  const openStoryModal = () => {
+    if (!canPlayHeroStory) return;
+    setHeroFrameIndex(0);
+    setStoryModalVisible(true);
+    setHeroStoryPlaying(true);
+  };
+
+  const closeStoryModal = () => {
+    setStoryModalVisible(false);
+    setHeroStoryPlaying(false);
+    setHeroFrameIndex(0);
+    journeyPlaybackStore.pauseBgm();
+  };
+
+  const toggleHeroStoryPlayback = () => {
+    if (!canPlayHeroStory) return;
+    setHeroStoryPlaying((prev) => !prev);
+  };
+
+  const openPhotoPreview = (uri, index) => {
+    if (!uri) return;
+    setPreviewIndex(index);
+    setPreviewVisible(true);
+  };
+
+  const closePhotoPreview = () => {
+    setPreviewVisible(false);
+  };
+
+  const openEditModal = () => {
+    if (!journey) return;
+    JourneyDetailPresenter.resetUpdateState();
+    setEditForm(createEditForm(journey));
+    setEditModalVisible(true);
+  };
+
+  const closeEditModal = () => {
+    if (updateStatus === 'loading') return;
+    JourneyDetailPresenter.resetUpdateState();
+    setEditModalVisible(false);
+  };
+
+  const updateEditField = (key, value) => {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const appendEditLocalPhotos = (photoUris) => {
+    if (!Array.isArray(photoUris) || !photoUris.length) return;
+    setEditForm((prev) => ({
+      ...prev,
+      localPhotoUris: [...prev.localPhotoUris, ...photoUris],
+    }));
+  };
+
+  const removeExistingPhotoAt = (index) => {
+    setEditForm((prev) => ({
+      ...prev,
+      existingPhotoUrls: prev.existingPhotoUrls.filter((_, i) => i !== index),
+    }));
+  };
+
+  const removeLocalPhotoAt = (index) => {
+    setEditForm((prev) => ({
+      ...prev,
+      localPhotoUris: prev.localPhotoUris.filter((_, i) => i !== index),
+    }));
+  };
+
+  const pickEditPhotosFromAlbum = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Photo permission required',
+          'Please allow photo library access, then tap Add Photos again.',
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: resolveImageMediaTypes(),
+        allowsMultipleSelection: true,
+        quality: 0.75,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      const selectedUris = result.assets
+        .map((asset) => asset?.uri)
+        .filter(Boolean);
+
+      if (!selectedUris.length) return;
+      appendEditLocalPhotos(selectedUris);
+    } catch (e) {
+      Alert.alert('Unable to open album', e?.message || 'Please try again.');
+    }
+  };
+
+  const submitJourneyUpdate = () => {
+    if (!journey) return;
+    JourneyDetailPresenter.onUpdateJourney({
+      id: journey.id,
+      ...editForm,
+    });
+  };
 
   return (
     <View style={styles.screen}>
@@ -100,8 +413,8 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
           <Text style={styles.subtitle}>{journey?.travelDates || ''}</Text>
         </View>
 
-        <Pressable style={styles.iconBtn}>
-          <Ionicons name="share-social-outline" size={18} color={Colors.textPrimary} />
+        <Pressable style={styles.iconBtn} onPress={openEditModal}>
+          <Ionicons name="create-outline" size={18} color={Colors.textPrimary} />
         </Pressable>
       </View>
 
@@ -118,11 +431,22 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.heroWrap}>
-                <Image source={{ uri: journey.detailHeroImage }} style={styles.heroImage} />
+                <Image source={{ uri: currentHeroFrame }} style={styles.heroImage} />
                 <View style={styles.heroOverlay} />
-                <View style={styles.playBtn}>
-                  <Ionicons name="play" size={26} color={Colors.textPrimary} />
-                </View>
+                <Pressable
+                  style={[
+                    styles.playBtn,
+                    !canPlayHeroStory && styles.playBtnDisabled,
+                  ]}
+                  onPress={openStoryModal}
+                  disabled={!canPlayHeroStory}
+                >
+                  <Ionicons
+                    name="play"
+                    size={26}
+                    color={Colors.textPrimary}
+                  />
+                </Pressable>
               </View>
 
               <View style={styles.sectionCard}>
@@ -156,11 +480,16 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
                   contentContainerStyle={styles.memoryRow}
                 >
                   {photoMemories.map((url, index) => (
-                    <Image
+                    <Pressable
                       key={`${journey.id}-memory-${index}`}
-                      source={{ uri: url }}
-                      style={styles.memoryImage}
-                    />
+                      onPress={() => openPhotoPreview(url, index)}
+                      style={styles.memoryImagePress}
+                    >
+                      <Image
+                        source={{ uri: url }}
+                        style={styles.memoryImage}
+                      />
+                    </Pressable>
                   ))}
                 </ScrollView>
               </View>
@@ -175,6 +504,127 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
           </View>
         )}
       </StatusOverlay>
+
+      <Modal
+        visible={isStoryModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeStoryModal}
+      >
+        <View style={styles.storyBackdrop}>
+          <Pressable style={styles.storyCloseBtn} onPress={closeStoryModal}>
+            <Ionicons name="close" size={24} color={Colors.textPrimary} />
+          </Pressable>
+
+          {heroStoryFrames.map((uri, index) => {
+            if (!uri) return null;
+            return (
+              <Image
+                key={`story-frame-${index}-${uri}`}
+                source={{ uri }}
+                style={[
+                  styles.storyImage,
+                  {
+                    width: screenWidth,
+                    height: screenHeight,
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    opacity: index === heroFrameIndex ? 1 : 0,
+                    zIndex: index === heroFrameIndex ? 1 : 0,
+                  },
+                ]}
+                resizeMode="cover"
+                onLoad={() => markHeroFrameLoaded(uri)}
+              />
+            );
+          })}
+
+          <Pressable
+            style={[
+              styles.storyPlayBtn,
+              !canPlayHeroStory && styles.storyPlayBtnDisabled,
+            ]}
+            onPress={toggleHeroStoryPlayback}
+            disabled={!canPlayHeroStory}
+            zIndex={2}
+          >
+            <Ionicons
+              name={isHeroStoryPlaying ? 'pause' : 'play'}
+              size={30}
+              color={Colors.textPrimary}
+            />
+          </Pressable>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isPreviewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closePhotoPreview}
+      >
+        <View style={styles.previewBackdrop}>
+          <Pressable style={styles.previewCloseBtn} onPress={closePhotoPreview}>
+            <Ionicons name="close" size={24} color={Colors.textPrimary} />
+          </Pressable>
+
+          {photoMemories.length ? (
+            <FlatList
+              ref={previewListRef}
+              data={photoMemories}
+              keyExtractor={(item, index) => `${journey?.id || 'journey'}-preview-${index}`}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              initialScrollIndex={Math.min(previewIndex, photoMemories.length - 1)}
+              getItemLayout={(_, index) => ({
+                length: screenWidth,
+                offset: screenWidth * index,
+                index,
+              })}
+              onMomentumScrollEnd={(event) => {
+                const nextIndex = Math.round(
+                  event.nativeEvent.contentOffset.x / screenWidth,
+                );
+                setPreviewIndex(nextIndex);
+              }}
+              onScrollToIndexFailed={(info) => {
+                const offset = info.averageItemLength * info.index;
+                previewListRef.current?.scrollToOffset({ offset, animated: false });
+              }}
+              renderItem={({ item }) => (
+                <View
+                  style={[
+                    styles.previewSlide,
+                    { width: screenWidth, height: screenHeight },
+                  ]}
+                >
+                  <Image
+                    source={{ uri: item }}
+                    style={[styles.previewImage, { width: screenWidth, height: screenHeight }]}
+                    resizeMode="contain"
+                  />
+                </View>
+              )}
+            />
+          ) : null}
+        </View>
+      </Modal>
+
+      <AddJourneyModal
+        visible={isEditModalVisible}
+        mode="edit"
+        form={editForm}
+        submitStatus={updateStatus}
+        submitErrorMessage={updateErrorMessage}
+        onChangeField={updateEditField}
+        onPickPhotos={pickEditPhotosFromAlbum}
+        onRemoveExistingPhoto={removeExistingPhotoAt}
+        onRemoveLocalPhoto={removeLocalPhotoAt}
+        onClose={closeEditModal}
+        onSubmit={submitJourneyUpdate}
+      />
     </View>
   );
 });
@@ -254,6 +704,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  playBtnDisabled: {
+    opacity: 0.55,
+  },
   sectionCard: {
     marginTop: 14,
     backgroundColor: Colors.surface,
@@ -330,6 +783,10 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingRight: 10,
   },
+  memoryImagePress: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   memoryImage: {
     width: 170,
     height: 95,
@@ -337,6 +794,74 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderSubtle,
     backgroundColor: Colors.surface,
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 12, 22, 0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+  },
+  storyBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 12, 22, 0.96)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+  },
+  storyCloseBtn: {
+    position: 'absolute',
+    top: 56,
+    right: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.borderDefault,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  storyImage: {
+    width: '100%',
+    height: '100%',
+  },
+  storyPlayBtn: {
+    position: 'absolute',
+    bottom: 48,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255, 255, 255, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  storyPlayBtnDisabled: {
+    opacity: 0.55,
+  },
+  previewCloseBtn: {
+    position: 'absolute',
+    top: 56,
+    right: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.borderDefault,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  previewSlide: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
   },
   notFoundWrap: {
     flex: 1,

@@ -9,12 +9,32 @@ export const JourneyDetailPresenter = {
     journeysStore.retry();
   },
 
+  onUpdateJourney(input) {
+    journeysStore.updateJourney(input);
+  },
+
+  ensureBgmTrack(journeyId) {
+    journeysStore.ensureBgmTrack(journeyId);
+  },
+
+  resetUpdateState() {
+    journeysStore.resetUpdateState();
+  },
+
   getLoadStatus() {
     return journeysStore.loadStatus;
   },
 
   getErrorMessage() {
     return journeysStore.errorMessage;
+  },
+
+  getUpdateStatus() {
+    return journeysStore.updateStatus;
+  },
+
+  getUpdateErrorMessage() {
+    return journeysStore.updateErrorMessage;
   },
 
   getJourneyById(journeyId) {

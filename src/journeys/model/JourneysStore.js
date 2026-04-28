@@ -8,9 +8,15 @@ class JourneysStoreClass {
 
   createStatus = 'idle';
 
+  updateStatus = 'idle';
+
   errorMessage = null;
 
   createErrorMessage = null;
+
+  updateErrorMessage = null;
+
+  bgmMatchInFlight = {};
 
   constructor() {
     makeAutoObservable(this);
@@ -65,6 +71,58 @@ class JourneysStoreClass {
   resetCreateState() {
     this.createStatus = 'idle';
     this.createErrorMessage = null;
+  }
+
+  async updateJourney(input) {
+    this.updateStatus = 'loading';
+    this.updateErrorMessage = null;
+
+    try {
+      const updated = await JourneysService.updateJourney(input);
+      runInAction(() => {
+        this.journeys = this.journeys.map((item) =>
+          String(item.id) === String(updated.id) ? updated : item,
+        );
+        this.updateStatus = 'success';
+      });
+    } catch (e) {
+      runInAction(() => {
+        this.updateStatus = 'error';
+        this.updateErrorMessage = e.message || 'Failed to update journey';
+      });
+    }
+  }
+
+  async ensureBgmTrack(journeyId) {
+    const targetId = String(journeyId || '').trim();
+    if (!targetId || this.bgmMatchInFlight[targetId]) return;
+
+    const target = this.journeys.find((item) => String(item.id) === targetId);
+    if (!target || target?.bgmTrack?.previewUrl) return;
+
+    this.bgmMatchInFlight[targetId] = true;
+
+    try {
+      const updated = await JourneysService.ensureBgmTrack(target);
+      if (updated) {
+        runInAction(() => {
+          this.journeys = this.journeys.map((item) =>
+            String(item.id) === targetId ? updated : item,
+          );
+        });
+      }
+    } catch (e) {
+      console.warn('BGM ensure failed:', e?.message || e);
+    } finally {
+      runInAction(() => {
+        delete this.bgmMatchInFlight[targetId];
+      });
+    }
+  }
+
+  resetUpdateState() {
+    this.updateStatus = 'idle';
+    this.updateErrorMessage = null;
   }
 }
 

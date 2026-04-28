@@ -18,6 +18,11 @@ const EMPTY_FORM = {
   places: '',
   visitedLocations: '',
   dailyExpenses: '',
+  bgmMoodTags: '',
+  bgmActivityTags: '',
+  bgmPreferredGenres: '',
+  bgmCustomKeywords: '',
+  bgmEnergyLevel: '',
   localPhotoUris: [],
 };
 
@@ -70,6 +75,21 @@ export const JourneysScreen = observer(function JourneysScreen() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const appendLocalPhotos = (photoUris) => {
+    if (!Array.isArray(photoUris) || photoUris.length < 1) return;
+    setForm((prev) => ({
+      ...prev,
+      localPhotoUris: [...prev.localPhotoUris, ...photoUris],
+    }));
+  };
+
+  const removeLocalPhotoAt = (index) => {
+    setForm((prev) => ({
+      ...prev,
+      localPhotoUris: prev.localPhotoUris.filter((_, i) => i !== index),
+    }));
+  };
+
   const pickPhotosFromAlbum = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -93,7 +113,7 @@ export const JourneysScreen = observer(function JourneysScreen() {
         .filter(Boolean);
 
       if (!selectedUris.length) return;
-      updateField('localPhotoUris', selectedUris);
+      appendLocalPhotos(selectedUris);
     } catch (e) {
       Alert.alert(
         'Unable to open album',
@@ -151,11 +171,13 @@ export const JourneysScreen = observer(function JourneysScreen() {
 
       <AddJourneyModal
         visible={isAddModalVisible}
+        mode="create"
         form={form}
-        createStatus={createStatus}
-        createErrorMessage={createErrorMessage}
+        submitStatus={createStatus}
+        submitErrorMessage={createErrorMessage}
         onChangeField={updateField}
         onPickPhotos={pickPhotosFromAlbum}
+        onRemoveLocalPhoto={removeLocalPhotoAt}
         onClose={closeAddModal}
         onSubmit={submitNewJourney}
       />
