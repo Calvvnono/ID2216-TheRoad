@@ -147,6 +147,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     setStoryModalVisible(false);
     setHeroStoryPlaying(false);
     setPreviewVisible(false);
+    setHeroFrameIndex(0);
     journeyPlaybackStore.stopBgm();
     router.replace('/journeys');
   }, [router]);
@@ -185,9 +186,6 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
 
   const canPlayHeroStory = heroStoryFrames.length > 1;
   const currentHeroFrame = heroStoryFrames[heroFrameIndex] || journey?.detailHeroImage || '';
-  const displayHeroFrame = loadedHeroFrames[currentHeroFrame]
-    ? currentHeroFrame
-    : lastLoadedHeroFrame || currentHeroFrame;
 
   const markHeroFrameLoaded = useCallback((uri) => {
     if (!uri) return;
@@ -255,19 +253,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     }
 
     const timer = setInterval(() => {
-      setHeroFrameIndex((prev) => {
-        const frames = heroFramesRef.current;
-        if (!frames.length) return prev;
-
-        for (let step = 1; step <= frames.length; step += 1) {
-          const nextIndex = (prev + step) % frames.length;
-          const nextUri = frames[nextIndex];
-          if (!nextUri) continue;
-          if (loadedHeroFramesRef.current[nextUri]) return nextIndex;
-        }
-
-        return prev;
-      });
+      setHeroFrameIndex((prev) => (prev + 1) % heroFramesRef.current.length);
     }, HERO_STORY_INTERVAL_MS);
 
     return () => {
@@ -298,6 +284,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     setStoryModalVisible(false);
     setHeroStoryPlaying(false);
     setPreviewVisible(false);
+    setHeroFrameIndex(0);
     journeyPlaybackStore.stopBgm();
   }, [isFocused]);
 
@@ -319,6 +306,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const closeStoryModal = () => {
     setStoryModalVisible(false);
     setHeroStoryPlaying(false);
+    setHeroFrameIndex(0);
     journeyPlaybackStore.pauseBgm();
   };
 
@@ -528,14 +516,29 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
             <Ionicons name="close" size={24} color={Colors.textPrimary} />
           </Pressable>
 
-          {displayHeroFrame ? (
-            <Image
-              source={{ uri: displayHeroFrame }}
-              style={[styles.storyImage, { width: screenWidth, height: screenHeight }]}
-              resizeMode="cover"
-              onLoad={() => markHeroFrameLoaded(displayHeroFrame)}
-            />
-          ) : null}
+          {heroStoryFrames.map((uri, index) => {
+            if (!uri) return null;
+            return (
+              <Image
+                key={`story-frame-${index}-${uri}`}
+                source={{ uri }}
+                style={[
+                  styles.storyImage,
+                  {
+                    width: screenWidth,
+                    height: screenHeight,
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    opacity: index === heroFrameIndex ? 1 : 0,
+                    zIndex: index === heroFrameIndex ? 1 : 0,
+                  },
+                ]}
+                resizeMode="cover"
+                onLoad={() => markHeroFrameLoaded(uri)}
+              />
+            );
+          })}
 
           <Pressable
             style={[
@@ -544,6 +547,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
             ]}
             onPress={toggleHeroStoryPlayback}
             disabled={!canPlayHeroStory}
+            zIndex={2}
           >
             <Ionicons
               name={isHeroStoryPlaying ? 'pause' : 'play'}
@@ -832,6 +836,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.32)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 2,
   },
   storyPlayBtnDisabled: {
     opacity: 0.55,
