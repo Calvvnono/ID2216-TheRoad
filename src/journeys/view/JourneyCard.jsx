@@ -1,13 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { View, Text, Image, Pressable, StyleSheet, Animated } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../shared/theme/colors';
 
 const BAR_PATTERN = [
   10, 22, 16, 26, 12, 20, 30, 16, 24, 18,
   26, 14, 20, 28, 12, 22, 16, 24, 10, 18,
 ];
-const STORY_INTERVAL_MS = 1300;
 
 function StatBox({ label, value }) {
   return (
@@ -21,8 +20,6 @@ function StatBox({ label, value }) {
 export function JourneyCard({ journey, onPress }) {
   const cardScale = useRef(new Animated.Value(1)).current;
   const cardOpacity = useRef(new Animated.Value(1)).current;
-  const [isStoryPlaying, setStoryPlaying] = useState(false);
-  const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
 
   const storyFrames = useMemo(() => {
     const fromMemories = Array.isArray(journey.photoMemories)
@@ -33,26 +30,6 @@ export function JourneyCard({ journey, onPress }) {
     return frames.length ? frames : [''];
   }, [journey.imageUrl, journey.photoMemories]);
 
-  const canPlayStory = storyFrames.length > 1;
-
-  useEffect(() => {
-    setStoryPlaying(false);
-    setCurrentFrameIndex(0);
-  }, [journey.id, storyFrames.length]);
-
-  useEffect(() => {
-    if (!isStoryPlaying || storyFrames.length < 2) {
-      return undefined;
-    }
-
-    const timer = setInterval(() => {
-      setCurrentFrameIndex((prev) => (prev + 1) % storyFrames.length);
-    }, STORY_INTERVAL_MS);
-
-    return () => {
-      clearInterval(timer);
-    };
-  }, [isStoryPlaying, storyFrames.length]);
 
   const handlePress = () => {
     Animated.sequence([
@@ -85,13 +62,7 @@ export function JourneyCard({ journey, onPress }) {
     });
   };
 
-  const toggleStoryPlayback = (event) => {
-    event?.stopPropagation?.();
-    if (!canPlayStory) return;
-    setStoryPlaying((prev) => !prev);
-  };
-
-  const currentFrame = storyFrames[currentFrameIndex] || journey.imageUrl;
+  const currentFrame = storyFrames[0] || journey.imageUrl;
 
   return (
     <Pressable onPress={handlePress}>
@@ -115,22 +86,6 @@ export function JourneyCard({ journey, onPress }) {
             </View>
 
             <View style={styles.topActions}>
-              <Pressable
-                style={[
-                  styles.iconBubble,
-                  styles.storyControl,
-                  !canPlayStory && styles.storyControlDisabled,
-                ]}
-                onPress={toggleStoryPlayback}
-                disabled={!canPlayStory}
-              >
-                <Ionicons
-                  name={isStoryPlaying ? 'pause' : 'play'}
-                  size={16}
-                  color={Colors.primary}
-                />
-              </Pressable>
-
               <View style={styles.iconBubble}>
                 <MaterialCommunityIcons
                   name="airplane"
@@ -229,12 +184,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.borderMedium,
-  },
-  storyControl: {
-    backgroundColor: 'rgba(0, 212, 255, 0.18)',
-  },
-  storyControlDisabled: {
-    opacity: 0.5,
   },
   metaRow: {
     marginTop: 12,

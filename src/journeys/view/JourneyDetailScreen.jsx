@@ -9,15 +9,18 @@ import {
   Pressable,
   Animated,
   Alert,
+  FlatList,
+  useWindowDimensions,
 } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { JourneyDetailPresenter } from '../presenter/JourneyDetailPresenter';
+import { journeyPlaybackStore } from '../model/JourneyPlaybackStore';
 import { AddJourneyModal } from './AddJourneyModal';
 
 const HERO_STORY_INTERVAL_MS = 1400;
@@ -105,15 +108,22 @@ function DailyExpenseBars({ values }) {
 export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const router = useRouter();
   const entryAnim = useRef(new Animated.Value(0)).current;
-  const bgmSoundRef = useRef(null);
-  const bgmLoadedUrlRef = useRef('');
+  const previewListRef = useRef(null);
+  const heroFramesRef = useRef([]);
+  const loadedHeroFramesRef = useRef({});
+  const lastLoadedHeroFrameRef = useRef('');
   const [isHeroStoryPlaying, setHeroStoryPlaying] = useState(false);
+  const [isStoryModalVisible, setStoryModalVisible] = useState(false);
   const [heroFrameIndex, setHeroFrameIndex] = useState(0);
-  const [previewPhotoUri, setPreviewPhotoUri] = useState('');
+  const [loadedHeroFrames, setLoadedHeroFrames] = useState({});
+  const [lastLoadedHeroFrame, setLastLoadedHeroFrame] = useState('');
+  const [previewIndex, setPreviewIndex] = useState(0);
   const [isPreviewVisible, setPreviewVisible] = useState(false);
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [hasRequestedBgm, setHasRequestedBgm] = useState(false);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
+  const isFocused = useIsFocused();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const params = useLocalSearchParams();
   const journeyIdParam = Array.isArray(params.journeyId)
     ? params.journeyId[0]
@@ -134,10 +144,10 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   }, [entryAnim, journeyId]);
 
   const handleBack = useCallback(() => {
-    if (typeof router.canGoBack === 'function' && router.canGoBack()) {
-      router.back();
-      return;
-    }
+    setStoryModalVisible(false);
+    setHeroStoryPlaying(false);
+    setPreviewVisible(false);
+    journeyPlaybackStore.stopBgm();
     router.replace('/journeys');
   }, [router]);
 
@@ -162,6 +172,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const dailyExpenses = journey?.dailyExpenses || [];
   const photoMemories = journey?.photoMemories || [];
   const bgmPreviewUrl = journey?.bgmTrack?.previewUrl || '';
+  const shouldPlayBgm = isFocused && isStoryModalVisible && isHeroStoryPlaying;
 
   const heroStoryFrames = useMemo(() => {
     const memories = Array.isArray(journey?.photoMemories)
@@ -174,12 +185,52 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
 
   const canPlayHeroStory = heroStoryFrames.length > 1;
   const currentHeroFrame = heroStoryFrames[heroFrameIndex] || journey?.detailHeroImage || '';
+  const displayHeroFrame = loadedHeroFrames[currentHeroFrame]
+    ? currentHeroFrame
+    : lastLoadedHeroFrame || currentHeroFrame;
+
+  const markHeroFrameLoaded = useCallback((uri) => {
+    if (!uri) return;
+    if (!loadedHeroFramesRef.current[uri]) {
+      loadedHeroFramesRef.current = { ...loadedHeroFramesRef.current, [uri]: true };
+      setLoadedHeroFrames((prev) => ({ ...prev, [uri]: true }));
+    }
+    lastLoadedHeroFrameRef.current = uri;
+    setLastLoadedHeroFrame(uri);
+  }, []);
+
+  useEffect(() => {
+    heroFramesRef.current = heroStoryFrames;
+  }, [heroStoryFrames]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadedHeroFramesRef.current = {};
+    lastLoadedHeroFrameRef.current = '';
+    setLoadedHeroFrames({});
+    setLastLoadedHeroFrame('');
+
+    heroStoryFrames.filter(Boolean).forEach((uri) => {
+      Image.prefetch(uri)
+        .then((ok) => {
+          if (!ok || cancelled) return;
+          markHeroFrameLoaded(uri);
+        })
+        .catch(() => {});
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [heroStoryFrames, markHeroFrameLoaded]);
 
   useEffect(() => {
     setHeroStoryPlaying(false);
+    setStoryModalVisible(false);
     setHeroFrameIndex(0);
     setPreviewVisible(false);
-    setPreviewPhotoUri('');
+    setPreviewIndex(0);
     setEditModalVisible(false);
     setHasRequestedBgm(false);
     JourneyDetailPresenter.resetUpdateState();
@@ -199,125 +250,86 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   }, [updateStatus]);
 
   useEffect(() => {
-    if (!isHeroStoryPlaying || heroStoryFrames.length < 2) {
+    if (!isHeroStoryPlaying || !isStoryModalVisible || heroStoryFrames.length < 2) {
       return undefined;
     }
 
     const timer = setInterval(() => {
-      setHeroFrameIndex((prev) => (prev + 1) % heroStoryFrames.length);
+      setHeroFrameIndex((prev) => {
+        const frames = heroFramesRef.current;
+        if (!frames.length) return prev;
+
+        for (let step = 1; step <= frames.length; step += 1) {
+          const nextIndex = (prev + step) % frames.length;
+          const nextUri = frames[nextIndex];
+          if (!nextUri) continue;
+          if (loadedHeroFramesRef.current[nextUri]) return nextIndex;
+        }
+
+        return prev;
+      });
     }, HERO_STORY_INTERVAL_MS);
 
     return () => {
       clearInterval(timer);
     };
-  }, [isHeroStoryPlaying, heroStoryFrames.length]);
+  }, [isHeroStoryPlaying, isStoryModalVisible, heroStoryFrames.length]);
 
   useEffect(() => {
-    if (!isHeroStoryPlaying || bgmPreviewUrl || hasRequestedBgm || !journey?.id) {
+    if (!shouldPlayBgm || bgmPreviewUrl || hasRequestedBgm || !journey?.id) {
       return;
     }
 
     JourneyDetailPresenter.ensureBgmTrack(journey.id);
     setHasRequestedBgm(true);
-  }, [isHeroStoryPlaying, bgmPreviewUrl, hasRequestedBgm, journey?.id]);
+  }, [shouldPlayBgm, bgmPreviewUrl, hasRequestedBgm, journey?.id]);
 
-  const unloadBgmSound = useCallback(async () => {
-    const sound = bgmSoundRef.current;
-    bgmSoundRef.current = null;
-    bgmLoadedUrlRef.current = '';
-
-    if (!sound) return;
-    try {
-      await sound.unloadAsync();
-    } catch (_) {
-      // Ignore unload errors when screen is being disposed.
-    }
-  }, []);
-
-  const pauseBgmSound = useCallback(async () => {
-    if (!bgmSoundRef.current) return;
-    try {
-      const status = await bgmSoundRef.current.getStatusAsync();
-      if (status?.isLoaded && status?.isPlaying) {
-        await bgmSoundRef.current.pauseAsync();
-      }
-    } catch (_) {
-      // Ignore transient pause errors.
-    }
-  }, []);
-
-  const playBgmSound = useCallback(async (previewUrl) => {
-    if (!previewUrl) return;
-
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      staysActiveInBackground: false,
-      playThroughEarpieceAndroid: false,
-    });
-
-    if (bgmSoundRef.current && bgmLoadedUrlRef.current === previewUrl) {
-      await bgmSoundRef.current.playAsync();
+  useEffect(() => {
+    if (!shouldPlayBgm) {
+      journeyPlaybackStore.pauseBgm();
       return;
     }
-
-    await unloadBgmSound();
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: previewUrl },
-      {
-        shouldPlay: true,
-        isLooping: true,
-        volume: BGM_VOLUME,
-      },
-    );
-
-    bgmSoundRef.current = sound;
-    bgmLoadedUrlRef.current = previewUrl;
-  }, [unloadBgmSound]);
+    if (!bgmPreviewUrl) return;
+    journeyPlaybackStore.playBgm(bgmPreviewUrl, BGM_VOLUME);
+  }, [shouldPlayBgm, bgmPreviewUrl]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const syncBgmPlayback = async () => {
-      if (!isHeroStoryPlaying) {
-        await pauseBgmSound();
-        return;
-      }
-
-      if (!bgmPreviewUrl) return;
-
-      try {
-        await playBgmSound(bgmPreviewUrl);
-      } catch (e) {
-        if (!cancelled) {
-          console.warn('Failed to play BGM:', e?.message || e);
-        }
-      }
-    };
-
-    syncBgmPlayback();
-    return () => {
-      cancelled = true;
-    };
-  }, [isHeroStoryPlaying, bgmPreviewUrl, pauseBgmSound, playBgmSound]);
+    if (isFocused) return;
+    setStoryModalVisible(false);
+    setHeroStoryPlaying(false);
+    setPreviewVisible(false);
+    journeyPlaybackStore.stopBgm();
+  }, [isFocused]);
 
   useEffect(() => {
-    unloadBgmSound();
-  }, [journey?.id, unloadBgmSound]);
+    journeyPlaybackStore.stopBgm();
+  }, [journey?.id]);
 
   useEffect(() => () => {
-    unloadBgmSound();
-  }, [unloadBgmSound]);
+    journeyPlaybackStore.stopBgm();
+  }, []);
+
+  const openStoryModal = () => {
+    if (!canPlayHeroStory) return;
+    setHeroFrameIndex(0);
+    setStoryModalVisible(true);
+    setHeroStoryPlaying(true);
+  };
+
+  const closeStoryModal = () => {
+    setStoryModalVisible(false);
+    setHeroStoryPlaying(false);
+    journeyPlaybackStore.pauseBgm();
+  };
 
   const toggleHeroStoryPlayback = () => {
     if (!canPlayHeroStory) return;
     setHeroStoryPlaying((prev) => !prev);
   };
 
-  const openPhotoPreview = (uri) => {
+  const openPhotoPreview = (uri, index) => {
     if (!uri) return;
-    setPreviewPhotoUri(uri);
+    setPreviewIndex(index);
     setPreviewVisible(true);
   };
 
@@ -438,11 +450,11 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
                     styles.playBtn,
                     !canPlayHeroStory && styles.playBtnDisabled,
                   ]}
-                  onPress={toggleHeroStoryPlayback}
+                  onPress={openStoryModal}
                   disabled={!canPlayHeroStory}
                 >
                   <Ionicons
-                    name={isHeroStoryPlaying ? 'pause' : 'play'}
+                    name="play"
                     size={26}
                     color={Colors.textPrimary}
                   />
@@ -482,7 +494,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
                   {photoMemories.map((url, index) => (
                     <Pressable
                       key={`${journey.id}-memory-${index}`}
-                      onPress={() => openPhotoPreview(url)}
+                      onPress={() => openPhotoPreview(url, index)}
                       style={styles.memoryImagePress}
                     >
                       <Image
@@ -506,6 +518,43 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
       </StatusOverlay>
 
       <Modal
+        visible={isStoryModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeStoryModal}
+      >
+        <View style={styles.storyBackdrop}>
+          <Pressable style={styles.storyCloseBtn} onPress={closeStoryModal}>
+            <Ionicons name="close" size={24} color={Colors.textPrimary} />
+          </Pressable>
+
+          {displayHeroFrame ? (
+            <Image
+              source={{ uri: displayHeroFrame }}
+              style={[styles.storyImage, { width: screenWidth, height: screenHeight }]}
+              resizeMode="cover"
+              onLoad={() => markHeroFrameLoaded(displayHeroFrame)}
+            />
+          ) : null}
+
+          <Pressable
+            style={[
+              styles.storyPlayBtn,
+              !canPlayHeroStory && styles.storyPlayBtnDisabled,
+            ]}
+            onPress={toggleHeroStoryPlayback}
+            disabled={!canPlayHeroStory}
+          >
+            <Ionicons
+              name={isHeroStoryPlaying ? 'pause' : 'play'}
+              size={30}
+              color={Colors.textPrimary}
+            />
+          </Pressable>
+        </View>
+      </Modal>
+
+      <Modal
         visible={isPreviewVisible}
         transparent
         animationType="fade"
@@ -516,11 +565,44 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
             <Ionicons name="close" size={24} color={Colors.textPrimary} />
           </Pressable>
 
-          {previewPhotoUri ? (
-            <Image
-              source={{ uri: previewPhotoUri }}
-              style={styles.previewImage}
-              resizeMode="contain"
+          {photoMemories.length ? (
+            <FlatList
+              ref={previewListRef}
+              data={photoMemories}
+              keyExtractor={(item, index) => `${journey?.id || 'journey'}-preview-${index}`}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              initialScrollIndex={Math.min(previewIndex, photoMemories.length - 1)}
+              getItemLayout={(_, index) => ({
+                length: screenWidth,
+                offset: screenWidth * index,
+                index,
+              })}
+              onMomentumScrollEnd={(event) => {
+                const nextIndex = Math.round(
+                  event.nativeEvent.contentOffset.x / screenWidth,
+                );
+                setPreviewIndex(nextIndex);
+              }}
+              onScrollToIndexFailed={(info) => {
+                const offset = info.averageItemLength * info.index;
+                previewListRef.current?.scrollToOffset({ offset, animated: false });
+              }}
+              renderItem={({ item }) => (
+                <View
+                  style={[
+                    styles.previewSlide,
+                    { width: screenWidth, height: screenHeight },
+                  ]}
+                >
+                  <Image
+                    source={{ uri: item }}
+                    style={[styles.previewImage, { width: screenWidth, height: screenHeight }]}
+                    resizeMode="contain"
+                  />
+                </View>
+              )}
             />
           ) : null}
         </View>
@@ -714,7 +796,45 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(8, 12, 22, 0.94)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 0,
+  },
+  storyBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 12, 22, 0.96)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+  },
+  storyCloseBtn: {
+    position: 'absolute',
+    top: 56,
+    right: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.borderDefault,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  storyImage: {
+    width: '100%',
+    height: '100%',
+  },
+  storyPlayBtn: {
+    position: 'absolute',
+    bottom: 48,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255, 255, 255, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storyPlayBtnDisabled: {
+    opacity: 0.55,
   },
   previewCloseBtn: {
     position: 'absolute',
@@ -730,10 +850,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 2,
   },
+  previewSlide: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   previewImage: {
     width: '100%',
-    height: '72%',
-    borderRadius: 10,
+    height: '100%',
   },
   notFoundWrap: {
     flex: 1,
