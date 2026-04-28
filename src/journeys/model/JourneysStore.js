@@ -1,4 +1,5 @@
 import { makeAutoObservable, runInAction } from 'mobx';
+import { BgmRecommendationService } from './BgmRecommendationService';
 import { JourneysService } from './JourneysService';
 
 class JourneysStoreClass {
@@ -16,6 +17,12 @@ class JourneysStoreClass {
 
   updateErrorMessage = null;
 
+  bgmStatusByJourneyId = {};
+
+  bgmErrorByJourneyId = {};
+
+  bgmTrackByJourneyId = {};
+
   constructor() {
     makeAutoObservable(this);
   }
@@ -29,6 +36,9 @@ class JourneysStoreClass {
       runInAction(() => {
         this.journeys = data;
         this.loadStatus = 'success';
+        this.bgmStatusByJourneyId = {};
+        this.bgmErrorByJourneyId = {};
+        this.bgmTrackByJourneyId = {};
       });
     } catch (e) {
       runInAction(() => {
@@ -57,6 +67,9 @@ class JourneysStoreClass {
       runInAction(() => {
         this.journeys = [created, ...this.journeys];
         this.createStatus = 'success';
+        this.bgmStatusByJourneyId[String(created.id)] = 'idle';
+        this.bgmErrorByJourneyId[String(created.id)] = null;
+        delete this.bgmTrackByJourneyId[String(created.id)];
       });
     } catch (e) {
       runInAction(() => {
@@ -82,6 +95,9 @@ class JourneysStoreClass {
           String(item.id) === String(updated.id) ? updated : item,
         );
         this.updateStatus = 'success';
+        this.bgmStatusByJourneyId[String(updated.id)] = 'idle';
+        this.bgmErrorByJourneyId[String(updated.id)] = null;
+        delete this.bgmTrackByJourneyId[String(updated.id)];
       });
     } catch (e) {
       runInAction(() => {
@@ -94,6 +110,53 @@ class JourneysStoreClass {
   resetUpdateState() {
     this.updateStatus = 'idle';
     this.updateErrorMessage = null;
+  }
+
+  async matchBgmForJourney(journeyId) {
+    const id = String(journeyId || '');
+    if (!id) return null;
+
+    if (this.bgmTrackByJourneyId[id]) {
+      this.bgmStatusByJourneyId[id] = 'success';
+      return this.bgmTrackByJourneyId[id];
+    }
+
+    if (this.bgmStatusByJourneyId[id] === 'loading') {
+      return null;
+    }
+
+    const journey = this.journeys.find((item) => String(item.id) === id);
+    if (!journey) {
+      this.bgmStatusByJourneyId[id] = 'error';
+      this.bgmErrorByJourneyId[id] = 'Journey not found.';
+      return null;
+    }
+
+    this.bgmStatusByJourneyId[id] = 'loading';
+    this.bgmErrorByJourneyId[id] = null;
+
+    try {
+      const track = await BgmRecommendationService.recommendJourneyBgm(journey);
+      runInAction(() => {
+        if (track) {
+          this.bgmTrackByJourneyId[id] = track;
+          this.bgmStatusByJourneyId[id] = 'success';
+          this.bgmErrorByJourneyId[id] = null;
+        } else {
+          this.bgmTrackByJourneyId[id] = null;
+          this.bgmStatusByJourneyId[id] = 'empty';
+          this.bgmErrorByJourneyId[id] = 'No matching BGM preview found.';
+        }
+      });
+      return track;
+    } catch (e) {
+      runInAction(() => {
+        this.bgmTrackByJourneyId[id] = null;
+        this.bgmStatusByJourneyId[id] = 'error';
+        this.bgmErrorByJourneyId[id] = e.message || 'Failed to match BGM.';
+      });
+      return null;
+    }
   }
 }
 

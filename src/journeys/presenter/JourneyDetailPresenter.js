@@ -13,6 +13,10 @@ export const JourneyDetailPresenter = {
     journeysStore.updateJourney(input);
   },
 
+  onMatchBgm(journeyId) {
+    journeysStore.matchBgmForJourney(journeyId);
+  },
+
   resetUpdateState() {
     journeysStore.resetUpdateState();
   },
@@ -31,6 +35,21 @@ export const JourneyDetailPresenter = {
 
   getUpdateErrorMessage() {
     return journeysStore.updateErrorMessage;
+  },
+
+  getBgmStatus(journeyId) {
+    const id = String(journeyId || '');
+    return journeysStore.bgmStatusByJourneyId[id] || 'idle';
+  },
+
+  getBgmErrorMessage(journeyId) {
+    const id = String(journeyId || '');
+    return journeysStore.bgmErrorByJourneyId[id] || null;
+  },
+
+  getBgmTrack(journeyId) {
+    const id = String(journeyId || '');
+    return journeysStore.bgmTrackByJourneyId[id] || null;
   },
 
   getJourneyById(journeyId) {

@@ -14,12 +14,14 @@ import { observer } from 'mobx-react-lite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { JourneyDetailPresenter } from '../presenter/JourneyDetailPresenter';
 import { AddJourneyModal } from './AddJourneyModal';
 
 const HERO_STORY_INTERVAL_MS = 1400;
+const BGM_VOLUME = 0.58;
 const EMPTY_EDIT_FORM = {
   destination: '',
   country: '',
@@ -29,6 +31,11 @@ const EMPTY_EDIT_FORM = {
   places: '',
   visitedLocations: '',
   dailyExpenses: '',
+  bgmMoodTags: '',
+  bgmActivityTags: '',
+  bgmPreferredGenres: '',
+  bgmCustomKeywords: '',
+  bgmEnergyLevel: '',
   existingPhotoUrls: [],
   localPhotoUris: [],
 };
@@ -49,6 +56,11 @@ function createEditForm(journey) {
     places: String(journey.places ?? ''),
     visitedLocations: toCommaSeparatedText(journey.visitedLocations),
     dailyExpenses: toCommaSeparatedText(journey.dailyExpenses),
+    bgmMoodTags: toCommaSeparatedText(journey.bgmMoodTags),
+    bgmActivityTags: toCommaSeparatedText(journey.bgmActivityTags),
+    bgmPreferredGenres: toCommaSeparatedText(journey.bgmPreferredGenres),
+    bgmCustomKeywords: toCommaSeparatedText(journey.bgmCustomKeywords),
+    bgmEnergyLevel: String(journey.bgmEnergyLevel ?? ''),
     existingPhotoUrls: Array.isArray(journey.photoMemories)
       ? journey.photoMemories.filter(Boolean)
       : [],
@@ -93,6 +105,8 @@ function DailyExpenseBars({ values }) {
 export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const router = useRouter();
   const entryAnim = useRef(new Animated.Value(0)).current;
+  const bgmSoundRef = useRef(null);
+  const bgmLoadedUrlRef = useRef('');
   const [isHeroStoryPlaying, setHeroStoryPlaying] = useState(false);
   const [heroFrameIndex, setHeroFrameIndex] = useState(0);
   const [previewPhotoUri, setPreviewPhotoUri] = useState('');
@@ -143,6 +157,9 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const updateStatus = JourneyDetailPresenter.getUpdateStatus();
   const updateErrorMessage = JourneyDetailPresenter.getUpdateErrorMessage();
   const journey = JourneyDetailPresenter.getJourneyById(journeyId);
+  const bgmStatus = JourneyDetailPresenter.getBgmStatus(journeyId);
+  const bgmErrorMessage = JourneyDetailPresenter.getBgmErrorMessage(journeyId);
+  const bgmTrack = JourneyDetailPresenter.getBgmTrack(journeyId);
   const visitedLocations = journey?.visitedLocations || [];
   const dailyExpenses = journey?.dailyExpenses || [];
   const photoMemories = journey?.photoMemories || [];
@@ -188,6 +205,101 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
       clearInterval(timer);
     };
   }, [isHeroStoryPlaying, heroStoryFrames.length]);
+
+  const unloadBgmSound = useCallback(async () => {
+    const sound = bgmSoundRef.current;
+    bgmSoundRef.current = null;
+    bgmLoadedUrlRef.current = '';
+
+    if (!sound) return;
+    try {
+      await sound.unloadAsync();
+    } catch (_) {
+      // Ignore unload errors when screen is being disposed.
+    }
+  }, []);
+
+  const pauseBgmSound = useCallback(async () => {
+    if (!bgmSoundRef.current) return;
+    try {
+      const status = await bgmSoundRef.current.getStatusAsync();
+      if (status?.isLoaded && status?.isPlaying) {
+        await bgmSoundRef.current.pauseAsync();
+      }
+    } catch (_) {
+      // Ignore transient pause errors.
+    }
+  }, []);
+
+  const playBgmSound = useCallback(async (previewUrl) => {
+    if (!previewUrl) return;
+
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+      staysActiveInBackground: false,
+      playThroughEarpieceAndroid: false,
+    });
+
+    if (bgmSoundRef.current && bgmLoadedUrlRef.current === previewUrl) {
+      await bgmSoundRef.current.playAsync();
+      return;
+    }
+
+    await unloadBgmSound();
+    const { sound } = await Audio.Sound.createAsync(
+      { uri: previewUrl },
+      {
+        shouldPlay: true,
+        isLooping: true,
+        volume: BGM_VOLUME,
+      },
+    );
+
+    bgmSoundRef.current = sound;
+    bgmLoadedUrlRef.current = previewUrl;
+  }, [unloadBgmSound]);
+
+  useEffect(() => {
+    if (!isHeroStoryPlaying || !journey?.id) return;
+    if (bgmStatus !== 'idle') return;
+    JourneyDetailPresenter.onMatchBgm(journey.id);
+  }, [isHeroStoryPlaying, journey?.id, bgmStatus]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncBgmPlayback = async () => {
+      if (!isHeroStoryPlaying) {
+        await pauseBgmSound();
+        return;
+      }
+
+      if (!bgmTrack?.previewUrl) return;
+
+      try {
+        await playBgmSound(bgmTrack.previewUrl);
+      } catch (e) {
+        if (!cancelled) {
+          console.warn('Failed to play BGM:', e?.message || e);
+        }
+      }
+    };
+
+    syncBgmPlayback();
+    return () => {
+      cancelled = true;
+    };
+  }, [isHeroStoryPlaying, bgmTrack?.previewUrl, pauseBgmSound, playBgmSound]);
+
+  useEffect(() => {
+    unloadBgmSound();
+  }, [journey?.id, unloadBgmSound]);
+
+  useEffect(() => () => {
+    unloadBgmSound();
+  }, [unloadBgmSound]);
 
   const toggleHeroStoryPlayback = () => {
     if (!canPlayHeroStory) return;
@@ -326,6 +438,27 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
                     color={Colors.textPrimary}
                   />
                 </Pressable>
+              </View>
+
+              <View style={styles.bgmCard}>
+                <Text style={styles.bgmTitle}>Auto BGM</Text>
+                {bgmStatus === 'loading' ? (
+                  <Text style={styles.bgmText}>Matching soundtrack for this journey...</Text>
+                ) : null}
+
+                {bgmTrack?.previewUrl ? (
+                  <>
+                    <Text style={styles.bgmTrackText}>
+                      {bgmTrack.trackName} - {bgmTrack.artistName}
+                    </Text>
+                    <Text style={styles.bgmText}>Source: {bgmTrack.source}</Text>
+                    <Text style={styles.bgmText}>Matched by: {bgmTrack.matchedBy}</Text>
+                  </>
+                ) : null}
+
+                {(bgmStatus === 'empty' || bgmStatus === 'error') && !bgmTrack?.previewUrl ? (
+                  <Text style={styles.bgmText}>{bgmErrorMessage || 'No matching BGM preview found.'}</Text>
+                ) : null}
               </View>
 
               <View style={styles.sectionCard}>
@@ -499,6 +632,31 @@ const styles = StyleSheet.create({
   },
   playBtnDisabled: {
     opacity: 0.55,
+  },
+  bgmCard: {
+    marginTop: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.borderDefault,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  bgmTitle: {
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  bgmTrackText: {
+    marginTop: 6,
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  bgmText: {
+    marginTop: 4,
+    color: Colors.textSecondary,
+    fontSize: 12,
   },
   sectionCard: {
     marginTop: 14,

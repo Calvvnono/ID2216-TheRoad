@@ -18,6 +18,11 @@ const EMPTY_FORM = {
   places: '',
   visitedLocations: '',
   dailyExpenses: '',
+  bgmMoodTags: '',
+  bgmActivityTags: '',
+  bgmPreferredGenres: '',
+  bgmCustomKeywords: '',
+  bgmEnergyLevel: '',
   localPhotoUris: [],
 };
 

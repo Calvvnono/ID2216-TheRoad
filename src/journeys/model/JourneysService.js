@@ -80,6 +80,12 @@ function toPositiveInt(value, fallback = 0) {
   return Math.max(0, Math.round(n));
 }
 
+function clampBgmEnergyLevel(value, fallback = 3) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(5, Math.max(1, Math.round(n)));
+}
+
 function toNonNegativeNumber(value, fallback = 0) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -130,6 +136,19 @@ function normalizeJourney(raw, idOverride) {
     ? raw.photoMemories.filter(Boolean)
     : [];
   const photos = toPositiveInt(raw.photos, photoMemories.length || 0);
+  const bgmMoodTags = Array.isArray(raw.bgmMoodTags)
+    ? raw.bgmMoodTags.filter(Boolean)
+    : [];
+  const bgmActivityTags = Array.isArray(raw.bgmActivityTags)
+    ? raw.bgmActivityTags.filter(Boolean)
+    : [];
+  const bgmPreferredGenres = Array.isArray(raw.bgmPreferredGenres)
+    ? raw.bgmPreferredGenres.filter(Boolean)
+    : [];
+  const bgmCustomKeywords = Array.isArray(raw.bgmCustomKeywords)
+    ? raw.bgmCustomKeywords.filter(Boolean)
+    : [];
+  const bgmEnergyLevel = clampBgmEnergyLevel(raw.bgmEnergyLevel, 3);
 
   return {
     id,
@@ -147,6 +166,11 @@ function normalizeJourney(raw, idOverride) {
     visitedLocations: visitedLocations.length ? visitedLocations : [destination],
     dailyExpenses: dailyExpenses.length ? dailyExpenses : [Math.max(1, Math.round(spent))],
     photoMemories: photoMemories.length ? photoMemories : [imageUrl],
+    bgmMoodTags,
+    bgmActivityTags,
+    bgmPreferredGenres,
+    bgmCustomKeywords,
+    bgmEnergyLevel,
   };
 }
 
@@ -177,6 +201,11 @@ function buildCreatePayload(input) {
   const places = toPositiveInt(input.places, 0);
   const visitedLocations = parseListText(input.visitedLocations);
   const dailyExpenses = parseListNumber(input.dailyExpenses);
+  const bgmMoodTags = parseListText(input.bgmMoodTags);
+  const bgmActivityTags = parseListText(input.bgmActivityTags);
+  const bgmPreferredGenres = parseListText(input.bgmPreferredGenres);
+  const bgmCustomKeywords = parseListText(input.bgmCustomKeywords);
+  const bgmEnergyLevel = clampBgmEnergyLevel(input.bgmEnergyLevel, 3);
 
   return {
     destination,
@@ -190,6 +219,11 @@ function buildCreatePayload(input) {
     localPhotoUris,
     visitedLocations: visitedLocations.length ? visitedLocations : [destination],
     dailyExpenses: dailyExpenses.length ? dailyExpenses : [Math.max(1, Math.round(spent))],
+    bgmMoodTags,
+    bgmActivityTags,
+    bgmPreferredGenres,
+    bgmCustomKeywords,
+    bgmEnergyLevel,
   };
 }
 
@@ -224,6 +258,11 @@ function buildUpdatePayload(input) {
   const places = toPositiveInt(input.places, 0);
   const visitedLocations = parseListText(input.visitedLocations);
   const dailyExpenses = parseListNumber(input.dailyExpenses);
+  const bgmMoodTags = parseListText(input.bgmMoodTags);
+  const bgmActivityTags = parseListText(input.bgmActivityTags);
+  const bgmPreferredGenres = parseListText(input.bgmPreferredGenres);
+  const bgmCustomKeywords = parseListText(input.bgmCustomKeywords);
+  const bgmEnergyLevel = clampBgmEnergyLevel(input.bgmEnergyLevel, 3);
 
   return {
     id: journeyId,
@@ -239,6 +278,11 @@ function buildUpdatePayload(input) {
     localPhotoUris,
     visitedLocations: visitedLocations.length ? visitedLocations : [destination],
     dailyExpenses: dailyExpenses.length ? dailyExpenses : [Math.max(1, Math.round(spent))],
+    bgmMoodTags,
+    bgmActivityTags,
+    bgmPreferredGenres,
+    bgmCustomKeywords,
+    bgmEnergyLevel,
   };
 }
 
@@ -320,6 +364,11 @@ export const JourneysService = {
       visitedLocations: payload.visitedLocations,
       dailyExpenses: payload.dailyExpenses,
       photoMemories,
+      bgmMoodTags: payload.bgmMoodTags,
+      bgmActivityTags: payload.bgmActivityTags,
+      bgmPreferredGenres: payload.bgmPreferredGenres,
+      bgmCustomKeywords: payload.bgmCustomKeywords,
+      bgmEnergyLevel: payload.bgmEnergyLevel,
     };
 
     const docRef = await addDoc(journeysRef(resolvedUid), {
@@ -356,6 +405,11 @@ export const JourneysService = {
       visitedLocations: payload.visitedLocations,
       dailyExpenses: payload.dailyExpenses,
       photoMemories,
+      bgmMoodTags: payload.bgmMoodTags,
+      bgmActivityTags: payload.bgmActivityTags,
+      bgmPreferredGenres: payload.bgmPreferredGenres,
+      bgmCustomKeywords: payload.bgmCustomKeywords,
+      bgmEnergyLevel: payload.bgmEnergyLevel,
     };
 
     const refDoc = doc(db, `users/${resolvedUid}/journeys/${payload.id}`);

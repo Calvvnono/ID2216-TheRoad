@@ -176,6 +176,39 @@ export function AddJourneyModal({
               onChangeText={(v) => onChangeField('dailyExpenses', v)}
             />
 
+            <Text style={styles.sectionLabel}>BGM Matching Preferences (optional)</Text>
+            <Field
+              label="Mood Tags (comma separated)"
+              value={form.bgmMoodTags}
+              placeholder="chill, cinematic, nostalgic"
+              onChangeText={(v) => onChangeField('bgmMoodTags', v)}
+            />
+            <Field
+              label="Activity Tags (comma separated)"
+              value={form.bgmActivityTags}
+              placeholder="roadtrip, citywalk, beach"
+              onChangeText={(v) => onChangeField('bgmActivityTags', v)}
+            />
+            <Field
+              label="Preferred Genres (comma separated)"
+              value={form.bgmPreferredGenres}
+              placeholder="indie pop, lofi, house"
+              onChangeText={(v) => onChangeField('bgmPreferredGenres', v)}
+            />
+            <Field
+              label="Custom Keywords (comma separated)"
+              value={form.bgmCustomKeywords}
+              placeholder="sunset, neon, mountain"
+              onChangeText={(v) => onChangeField('bgmCustomKeywords', v)}
+            />
+            <Field
+              label="Energy Level (1-5)"
+              value={form.bgmEnergyLevel}
+              placeholder="3"
+              keyboardType="numeric"
+              onChangeText={(v) => onChangeField('bgmEnergyLevel', v)}
+            />
+
             {actionErrorMessage ? (
               <Text style={styles.errorText}>{actionErrorMessage}</Text>
             ) : null}
@@ -246,6 +279,13 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 12,
     marginBottom: 10,
+  },
+  sectionLabel: {
+    marginTop: 4,
+    marginBottom: 6,
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
   },
   fieldWrap: {
     marginBottom: 10,
