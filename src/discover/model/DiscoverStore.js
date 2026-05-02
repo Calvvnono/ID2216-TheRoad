@@ -1,5 +1,6 @@
 import { makeAutoObservable, reaction, runInAction } from 'mobx';
 import { profileStore } from '../../profile/model/ProfileStore';
+import { ProfileService } from '../../profile/model/ProfileService';
 import { DiscoverService } from './DiscoverService';
 
 class DiscoverStoreClass {
@@ -58,6 +59,10 @@ class DiscoverStoreClass {
     try {
       const { topPicks, communityInsights } =
         await DiscoverService.fetchDiscoverPage();
+      const discoverAward = await ProfileService.awardDailyDiscoverBrowseXp();
+      if (discoverAward?.isAwarded) {
+        await profileStore.refreshProfile();
+      }
       runInAction(() => {
         this.topPicks = topPicks;
         this.communityInsights = communityInsights;
