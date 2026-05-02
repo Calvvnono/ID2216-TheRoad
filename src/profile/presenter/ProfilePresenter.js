@@ -81,4 +81,20 @@ export const ProfilePresenter = {
   getWishlistDetailStatus() {
     return profileStore.wishlistDetailStatus;
   },
+
+  onOpenTaskModal() {
+    profileStore.openTaskModal();
+  },
+
+  onCloseTaskModal() {
+    profileStore.closeTaskModal();
+  },
+
+  getTaskModalVisible() {
+    return profileStore.taskModalVisible;
+  },
+
+  getTaskList() {
+    return profileStore.taskListViewModel;
+  },
 };

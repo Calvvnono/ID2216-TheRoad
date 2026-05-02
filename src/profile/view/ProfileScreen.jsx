@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { observer } from 'mobx-react-lite';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { ProfilePresenter } from '../presenter/ProfilePresenter';
@@ -8,11 +9,18 @@ import { ProfileHeader } from './ProfileHeader';
 import { WishlistCarousel } from './WishlistCarousel';
 import { PreferencePanel } from './PreferencePanel';
 import { PlaceDetailModal } from '../../discover/view/PlaceDetailModal';
+import { TaskModal } from './TaskModal';
 
 export const ProfileScreen = observer(function ProfileScreen() {
   useEffect(() => {
     ProfilePresenter.init();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      ProfilePresenter.reload();
+    }, []),
+  );
 
   const loadStatus = ProfilePresenter.getLoadStatus();
   const errorMessage = ProfilePresenter.getErrorMessage();
@@ -46,8 +54,15 @@ export const ProfileScreen = observer(function ProfileScreen() {
               profile={profile}
               onUploadAvatar={() => ProfilePresenter.onPickAvatar()}
               isUploading={isUploading}
+              onOpenTasks={() => ProfilePresenter.onOpenTaskModal()}
             />
           ) : null}
+
+          <TaskModal
+            visible={ProfilePresenter.getTaskModalVisible()}
+            tasks={ProfilePresenter.getTaskList()}
+            onClose={() => ProfilePresenter.onCloseTaskModal()}
+          />
 
           <WishlistCarousel
             wishlist={wishlist}

@@ -8,18 +8,28 @@ import {
   doc,
   getDoc,
   getDocs,
+  runTransaction,
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
 import { auth, db, storage } from '../../shared/api/firebaseClient';
+import {
+  computeProgress,
+  levelFromXp,
+  titleForLevel,
+  XP_EVENT_KEYS,
+} from './xpSystem';
 
 const DEFAULT_PROFILE = {
   name: 'New Traveler',
   avatarUrl:
     'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&h=200&fit=crop',
-  badgeLabel: 'Globetrotter',
+  badgeLabel: 'Trail Rookie',
   badgeLevel: 1,
 };
+
+const INITIAL_XP = 40;
+const INITIAL_GRANTED_KEYS = [XP_EVENT_KEYS.FIRST_PROFILE_BOOTSTRAP];
 
 const DEFAULT_PREFERENCES = {
   budgetPerDay: 200,
@@ -46,19 +56,75 @@ function wishlistRef(uid) {
   return collection(db, `users/${uid}/wishlist`);
 }
 
+function placeWishlistRef(uid, placeId) {
+  return doc(db, `users/${uid}/wishlist/${placeId}`);
+}
+
+function normalizeProfileFromDoc(uid, data = {}) {
+  const totalXpRaw = Number(data.totalXp);
+  const totalXp = Number.isFinite(totalXpRaw)
+    ? Math.max(0, Math.round(totalXpRaw))
+    : INITIAL_XP;
+  const derivedLevel = levelFromXp(totalXp);
+  const derivedTitle = titleForLevel(derivedLevel);
+
+  return {
+    id: uid,
+    name: data.displayName ?? DEFAULT_PROFILE.name,
+    avatarUrl: data.photoURL ?? DEFAULT_PROFILE.avatarUrl,
+    badgeLabel: data.badgeLabel ?? derivedTitle,
+    badgeLevel: data.badgeLevel ?? derivedLevel,
+    totalXp,
+    grantedXpKeys: Array.isArray(data.grantedXpKeys)
+      ? data.grantedXpKeys
+      : INITIAL_GRANTED_KEYS,
+    xpMeta:
+      data.xpMeta && typeof data.xpMeta === 'object' ? data.xpMeta : {},
+  };
+}
+
 async function ensureProfileDoc(uid) {
   const ref = userRef(uid);
   const snap = await getDoc(ref);
   if (snap.exists()) {
     const data = snap.data();
+    const normalized = normalizeProfileFromDoc(uid, data);
+    const progress = computeProgress(normalized.totalXp);
+
+    const needsBackfill =
+      !Number.isFinite(Number(data.totalXp)) ||
+      !Array.isArray(data.grantedXpKeys) ||
+      data.badgeLevel !== progress.level ||
+      data.badgeLabel !== progress.title;
+
+    if (needsBackfill) {
+      await setDoc(
+        ref,
+        {
+          totalXp: normalized.totalXp,
+          grantedXpKeys: normalized.grantedXpKeys,
+          xpMeta: normalized.xpMeta,
+          badgeLevel: progress.level,
+          badgeLabel: progress.title,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
+
     return {
       id: uid,
-      name: data.displayName ?? DEFAULT_PROFILE.name,
-      avatarUrl: data.photoURL ?? DEFAULT_PROFILE.avatarUrl,
-      badgeLabel: data.badgeLabel ?? DEFAULT_PROFILE.badgeLabel,
-      badgeLevel: data.badgeLevel ?? DEFAULT_PROFILE.badgeLevel,
+      name: normalized.name,
+      avatarUrl: normalized.avatarUrl,
+      badgeLevel: progress.level,
+      badgeLabel: progress.title,
+      totalXp: normalized.totalXp,
+      grantedXpKeys: normalized.grantedXpKeys,
+      xpMeta: normalized.xpMeta,
     };
   }
+
+  const initialProgress = computeProgress(INITIAL_XP);
 
   await setDoc(
     ref,
@@ -67,8 +133,11 @@ async function ensureProfileDoc(uid) {
       provider: auth.currentUser?.providerData?.[0]?.providerId ?? 'anonymous',
       displayName: DEFAULT_PROFILE.name,
       photoURL: DEFAULT_PROFILE.avatarUrl,
-      badgeLabel: DEFAULT_PROFILE.badgeLabel,
-      badgeLevel: DEFAULT_PROFILE.badgeLevel,
+      totalXp: INITIAL_XP,
+      grantedXpKeys: INITIAL_GRANTED_KEYS,
+      xpMeta: {},
+      badgeLabel: initialProgress.title,
+      badgeLevel: initialProgress.level,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     },
@@ -79,8 +148,11 @@ async function ensureProfileDoc(uid) {
     id: uid,
     name: DEFAULT_PROFILE.name,
     avatarUrl: DEFAULT_PROFILE.avatarUrl,
-    badgeLabel: DEFAULT_PROFILE.badgeLabel,
-    badgeLevel: DEFAULT_PROFILE.badgeLevel,
+    badgeLabel: initialProgress.title,
+    badgeLevel: initialProgress.level,
+    totalXp: INITIAL_XP,
+    grantedXpKeys: INITIAL_GRANTED_KEYS,
+    xpMeta: {},
   };
 }
 
@@ -109,9 +181,203 @@ async function ensurePreferencesDoc(uid) {
 }
 
 export const ProfileService = {
+  async awardXpByRule(rule, uidArg) {
+    const resolvedUid = await ensureUid(uidArg);
+    const refDoc = userRef(resolvedUid);
+
+    return runTransaction(db, async (tx) => {
+      const snap = await tx.get(refDoc);
+      const existing = snap.exists() ? snap.data() : {};
+      const normalized = normalizeProfileFromDoc(resolvedUid, existing);
+
+      const grantedSet = new Set(normalized.grantedXpKeys);
+      const xpMeta = { ...normalized.xpMeta };
+      let awardedXp = 0;
+
+      if (rule?.once && grantedSet.has(rule.key)) {
+        return {
+          awardedXp: 0,
+          totalXp: normalized.totalXp,
+          badgeLevel: levelFromXp(normalized.totalXp),
+          badgeLabel: titleForLevel(levelFromXp(normalized.totalXp)),
+          isAwarded: false,
+        };
+      }
+
+      if (rule?.dailyCapKey && Number.isFinite(rule?.dailyCap)) {
+        const today = new Date().toISOString().slice(0, 10);
+        const dateField = `${rule.dailyCapKey}Date`;
+        const countField = `${rule.dailyCapKey}Count`;
+        const previousDate = String(xpMeta[dateField] || '');
+        const previousCount =
+          previousDate === today ? Number(xpMeta[countField] || 0) : 0;
+
+        if (previousCount >= rule.dailyCap) {
+          return {
+            awardedXp: 0,
+            totalXp: normalized.totalXp,
+            badgeLevel: levelFromXp(normalized.totalXp),
+            badgeLabel: titleForLevel(levelFromXp(normalized.totalXp)),
+            isAwarded: false,
+          };
+        }
+
+        xpMeta[dateField] = today;
+        xpMeta[countField] = previousCount + 1;
+        awardedXp = Math.max(0, Math.round(Number(rule.amount) || 0));
+      } else {
+        awardedXp = Math.max(0, Math.round(Number(rule?.amount) || 0));
+      }
+
+      if (rule?.once) {
+        grantedSet.add(rule.key);
+      }
+
+      if (awardedXp < 1) {
+        return {
+          awardedXp: 0,
+          totalXp: normalized.totalXp,
+          badgeLevel: levelFromXp(normalized.totalXp),
+          badgeLabel: titleForLevel(levelFromXp(normalized.totalXp)),
+          isAwarded: false,
+        };
+      }
+
+      const totalXp = normalized.totalXp + awardedXp;
+      const nextLevel = levelFromXp(totalXp);
+      const nextTitle = titleForLevel(nextLevel);
+
+      tx.set(
+        refDoc,
+        {
+          uid: resolvedUid,
+          provider: auth.currentUser?.providerData?.[0]?.providerId ?? 'anonymous',
+          displayName: normalized.name,
+          photoURL: normalized.avatarUrl,
+          totalXp,
+          grantedXpKeys: Array.from(grantedSet),
+          xpMeta,
+          badgeLevel: nextLevel,
+          badgeLabel: nextTitle,
+          updatedAt: serverTimestamp(),
+          createdAt: existing.createdAt ?? serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      return {
+        awardedXp,
+        totalXp,
+        badgeLevel: nextLevel,
+        badgeLabel: nextTitle,
+        isAwarded: true,
+      };
+    });
+  },
+
+  async awardWishlistAddedXp(uid) {
+    return this.awardXpByRule(
+      {
+        key: XP_EVENT_KEYS.WISHLIST_ADD_DAILY,
+        amount: 30,
+        dailyCapKey: XP_EVENT_KEYS.WISHLIST_ADD_DAILY,
+        dailyCap: 3,
+      },
+      uid,
+    );
+  },
+
+  async awardDailySigninXp(uid) {
+    return this.awardXpByRule(
+      {
+        key: XP_EVENT_KEYS.DAILY_SIGNIN,
+        amount: 10,
+        dailyCapKey: XP_EVENT_KEYS.DAILY_SIGNIN,
+        dailyCap: 1,
+      },
+      uid,
+    );
+  },
+
+  async awardDailyDiscoverBrowseXp(uid) {
+    return this.awardXpByRule(
+      {
+        key: XP_EVENT_KEYS.DAILY_DISCOVER_BROWSE,
+        amount: 10,
+        dailyCapKey: XP_EVENT_KEYS.DAILY_DISCOVER_BROWSE,
+        dailyCap: 1,
+      },
+      uid,
+    );
+  },
+
+  async awardBudgetSavedXp(uid) {
+    return this.awardXpByRule(
+      { key: XP_EVENT_KEYS.FIRST_BUDGET_SAVE, amount: 40, once: true },
+      uid,
+    );
+  },
+
+  async awardAvatarUploadedXp(uid) {
+    return this.awardXpByRule(
+      { key: XP_EVENT_KEYS.FIRST_AVATAR_UPLOAD, amount: 40, once: true },
+      uid,
+    );
+  },
+
+  async awardExportXp(uid) {
+    return this.awardXpByRule(
+      { key: XP_EVENT_KEYS.FIRST_EXPORT, amount: 20, once: true },
+      uid,
+    );
+  },
+
+  async awardJourneyCreatedXp(uid) {
+    return this.awardXpByRule(
+      { key: XP_EVENT_KEYS.FIRST_JOURNEY_CREATE, amount: 120, once: true },
+      uid,
+    );
+  },
+
+  async awardJourneyEditedXp(uid) {
+    return this.awardXpByRule(
+      { key: XP_EVENT_KEYS.FIRST_JOURNEY_EDIT, amount: 60, once: true },
+      uid,
+    );
+  },
+
+  async awardJourneyPhotoMilestoneXp(uid) {
+    return this.awardXpByRule(
+      {
+        key: XP_EVENT_KEYS.FIRST_JOURNEY_PHOTO_MILESTONE,
+        amount: 50,
+        once: true,
+      },
+      uid,
+    );
+  },
+
+  async awardJourneyBgmMatchedXp(uid) {
+    return this.awardXpByRule(
+      { key: XP_EVENT_KEYS.FIRST_JOURNEY_BGM_MATCH, amount: 40, once: true },
+      uid,
+    );
+  },
+
   async fetchProfile(uid) {
     const resolvedUid = await ensureUid(uid);
-    return ensureProfileDoc(resolvedUid);
+    const base = await ensureProfileDoc(resolvedUid);
+    const progress = computeProgress(base.totalXp);
+    return {
+      id: base.id,
+      name: base.name,
+      avatarUrl: base.avatarUrl,
+      totalXp: base.totalXp,
+      badgeLevel: progress.level,
+      badgeLabel: progress.title,
+      grantedXpKeys: base.grantedXpKeys,
+      xpMeta: base.xpMeta,
+    };
   },
 
   async fetchWishlist(uid) {
@@ -133,8 +399,10 @@ export const ProfileService = {
     const resolvedUid = await ensureUid(uid);
     const placeId = item.id;
     if (!placeId) throw new Error('Wishlist item requires id');
+    const placeRef = placeWishlistRef(resolvedUid, placeId);
+    const existing = await getDoc(placeRef);
     await setDoc(
-      doc(db, `users/${resolvedUid}/wishlist/${placeId}`),
+      placeRef,
       {
         name: item.name ?? 'Untitled',
         imageUrl: item.imageUrl ?? '',
@@ -143,6 +411,11 @@ export const ProfileService = {
       },
       { merge: true },
     );
+    if (!existing.exists()) {
+      await this.awardWishlistAddedXp(resolvedUid);
+      return { added: true };
+    }
+    return { added: false };
   },
 
   async removeWishlistItem(placeId, uid) {
@@ -212,7 +485,9 @@ export const ProfileService = {
 
     const avatarStorageRef = ref(storage, avatarPath);
     const downloadUrl = await getDownloadURL(avatarStorageRef);
-    return this.updateProfilePatch({ avatarUrl: downloadUrl }, resolvedUid);
+    await this.updateProfilePatch({ avatarUrl: downloadUrl }, resolvedUid);
+    await this.awardAvatarUploadedXp(resolvedUid);
+    return this.fetchProfile(resolvedUid);
   },
 
   async fetchPlaceDetail(placeId, placeName) {
