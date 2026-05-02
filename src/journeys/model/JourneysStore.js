@@ -1,5 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { JourneysService } from './JourneysService';
+import { ProfileService } from '../../profile/model/ProfileService';
 
 class JourneysStoreClass {
   journeys = [];
@@ -56,6 +57,10 @@ class JourneysStoreClass {
 
     try {
       const created = await JourneysService.createJourney(input);
+      await ProfileService.awardJourneyCreatedXp();
+      if (Array.isArray(created?.photoMemories) && created.photoMemories.length >= 3) {
+        await ProfileService.awardJourneyPhotoMilestoneXp();
+      }
       runInAction(() => {
         this.journeys = [created, ...this.journeys];
         this.createStatus = 'success';
@@ -79,6 +84,10 @@ class JourneysStoreClass {
 
     try {
       const updated = await JourneysService.updateJourney(input);
+      await ProfileService.awardJourneyEditedXp();
+      if (Array.isArray(updated?.photoMemories) && updated.photoMemories.length >= 3) {
+        await ProfileService.awardJourneyPhotoMilestoneXp();
+      }
       runInAction(() => {
         this.journeys = this.journeys.map((item) =>
           String(item.id) === String(updated.id) ? updated : item,
@@ -105,6 +114,9 @@ class JourneysStoreClass {
     try {
       const updated = await JourneysService.ensureBgmTrack(target);
       if (updated) {
+        if (updated?.bgmTrack?.previewUrl && !target?.bgmTrack?.previewUrl) {
+          await ProfileService.awardJourneyBgmMatchedXp();
+        }
         runInAction(() => {
           this.journeys = this.journeys.map((item) =>
             String(item.id) === targetId ? updated : item,
