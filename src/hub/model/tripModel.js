@@ -90,13 +90,20 @@ export function tripsTimeBounds(trips) {
 }
 
 /**
- * Trips whose journey has started on or before the cutoff instant.
+ * Trips whose journey time overlaps with [startMs, endMs].
  * @param {Trip[]} trips
- * @param {number} cutoffMs
+ * @param {number} startMs
+ * @param {number} endMs
  * @returns {Trip[]}
  */
-export function filterTripsByTimeEnd(trips, cutoffMs) {
-  return trips.filter((t) => new Date(t.startDate).getTime() <= cutoffMs);
+export function filterTripsByTimeRange(trips, startMs, endMs) {
+  const rangeStart = Math.min(startMs, endMs);
+  const rangeEnd = Math.max(startMs, endMs);
+  return trips.filter((t) => {
+    const tripStart = new Date(t.startDate).getTime();
+    const tripEnd = new Date(t.endDate).getTime();
+    return tripStart <= rangeEnd && tripEnd >= rangeStart;
+  });
 }
 
 /**

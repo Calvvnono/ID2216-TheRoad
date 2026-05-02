@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { observer } from 'mobx-react-lite';
 import {
@@ -61,25 +62,37 @@ function HubScreen() {
               <View style={styles.body}>
                 <GlobeSection
                   selectedLocationName={HubPresenter.selectedLocationName}
-                  timeSliderNormalized={HubPresenter.timeSliderNormalized}
+                  timeStartNormalized={HubPresenter.timeStartNormalized}
+                  timeEndNormalized={HubPresenter.timeEndNormalized}
                   aggregatedLocationsPlain={HubPresenter.aggregatedLocationsPlain}
                   routeCoordinatesPlain={HubPresenter.routeCoordinatesPlain}
-                  timeSliderDateLabel={HubPresenter.timeSliderDateLabel}
+                  timeStartDateLabel={HubPresenter.timeStartDateLabel}
+                  timeEndDateLabel={HubPresenter.timeEndDateLabel}
                   onMarkerPress={HubPresenter.onMarkerPress}
-                  onTimeSliderChange={HubPresenter.onTimeSliderChange}
+                  onTimeStartChange={HubPresenter.onTimeStartChange}
+                  onTimeEndChange={HubPresenter.onTimeEndChange}
+                  onResetTimeRange={HubPresenter.onResetTimeRange}
                 />
 
                 <TouchableOpacity
                   style={styles.dashboardBtn}
                   activeOpacity={0.88}
                   onPress={() => setDashboardOpen((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    dashboardOpen ? 'Hide dashboard' : 'View dashboard'
+                  }
+                  accessibilityHint={
+                    dashboardOpen
+                      ? 'Collapses trip stats below the map'
+                      : 'Shows trip stats cards below the map'
+                  }
                 >
-                  <Text style={styles.dashboardChevron}>
-                    {dashboardOpen ? '⌄' : '⌃'}
-                  </Text>
-                  <Text style={styles.dashboardBtnText}>
-                    {dashboardOpen ? 'Hide dashboard' : 'View Dashboard'}
-                  </Text>
+                  <Ionicons
+                    name={dashboardOpen ? 'chevron-up' : 'stats-chart-outline'}
+                    size={22}
+                    color={Colors.primary}
+                  />
                 </TouchableOpacity>
 
                 {dashboardOpen && <StatsCards stats={HubPresenter.stats} />}
@@ -148,27 +161,15 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   dashboardBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xxl,
-    borderRadius: BorderRadius.pill,
+    alignSelf: 'flex-end',
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
     borderWidth: 1,
     borderColor: Colors.borderMedium,
     backgroundColor: Colors.surface,
-  },
-  dashboardChevron: {
-    fontSize: 18,
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-  dashboardBtnText: {
-    ...Typography.buttonText,
-    color: Colors.textPrimary,
-    fontWeight: '600',
   },
 });
 
