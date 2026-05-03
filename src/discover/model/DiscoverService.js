@@ -1,5 +1,13 @@
+import { collectionGroup, getDocs, limit, query } from 'firebase/firestore';
 import { ProfileService } from '../../profile/model/ProfileService';
+import {
+  aggregateCommunityKeywordCounts,
+  pickCommunityKeywordCounts,
+} from '../../profile/model/interestKeywords';
 import { placesClient } from '../../shared/api/placesClient';
+import { db } from '../../shared/api/firebaseClient';
+
+const COMMUNITY_SAMPLE_SIZE = 120;
 
 function mapApiPlace(place, keyword) {
   return {
@@ -10,6 +18,16 @@ function mapApiPlace(place, keyword) {
     reason: place.editorialSummary?.text ?? `Top ${keyword} destination`,
     keywords: [keyword],
   };
+}
+
+async function fetchCommunityJourneySample(maxDocs = COMMUNITY_SAMPLE_SIZE) {
+  try {
+    const snap = await getDocs(query(collectionGroup(db, 'journeys'), limit(maxDocs)));
+    return snap.docs.map((d) => d.data() || {});
+  } catch (e) {
+    console.warn('Community journeys read failed:', e?.message || e);
+    return [];
+  }
 }
 
 function mapDetail(raw) {
@@ -24,70 +42,72 @@ function mapDetail(raw) {
   };
 }
 
-function buildOverlayLine(prefs, place) {
-  const budget = prefs?.budgetPerDay ?? 200;
-  const acts = prefs?.favoriteActivities ?? [];
-  const love = acts.slice(0, 2).join(' & ') || 'culture & adventure';
+function buildOverlayLine(budget, forYouKeywords, place) {
+  const love =
+    forYouKeywords.slice(0, 2).join(' & ') || 'culture & adventure';
   return `$${budget}/day · ${love} · ${place.reason}`;
 }
 
+async function searchByKeywords(keywords, offset, seen) {
+  if (!Array.isArray(keywords) || keywords.length === 0) return [];
+  const results = await Promise.all(
+    keywords.map((kw, i) => placesClient.searchText(kw, i + offset)),
+  );
+  return results
+    .flatMap((places, i) => places.map((p) => mapApiPlace(p, keywords[i])))
+    .filter((p) => {
+      if (seen.has(p.id) || !p.imageUrl) return false;
+      seen.add(p.id);
+      return true;
+    });
+}
+
 export const DiscoverService = {
-  async fetchDiscoverPage() {
-    const [prefs, wishlist] = await Promise.all([
-      ProfileService.fetchPreferences(),
+  async fetchDiscoverPage({ forYouKeywords = [], budget = 200 } = {}) {
+    const [wishlist, communitySample] = await Promise.all([
       ProfileService.fetchWishlist(),
+      fetchCommunityJourneySample(),
     ]);
-
     const wishlistIds = new Set(wishlist.map((w) => w.id));
-    const userKw = prefs?.favoriteActivities?.slice(0, 3) ?? [];
-    const budget = prefs?.budgetPerDay ?? 200;
 
-    let rawPicks = [];
-    let rawInsights = [];
+    const excludeSet = new Set(
+      forYouKeywords.map((k) => String(k || '').trim().toLowerCase()).filter(Boolean),
+    );
+    const communityCounts = aggregateCommunityKeywordCounts(communitySample);
+    const communityPicks = pickCommunityKeywordCounts(communityCounts, excludeSet, 3);
+    const communityKeywords = communityPicks.map(([token]) => token);
+    const communityCountByKeyword = new Map(communityPicks);
 
-    if (userKw.length > 0) {
-      try {
-        const [pickResults, insightResults] = await Promise.all([
-          Promise.all(userKw.map((kw, i) => placesClient.searchText(kw, budget, i))),
-          Promise.all(userKw.map((kw, i) => placesClient.searchText(kw, budget, i + 3))),
-        ]);
-
-        const seen = new Set();
-
-        rawPicks = pickResults
-          .flatMap((places, i) => places.map((p) => mapApiPlace(p, userKw[i])))
-          .filter((p) => {
-            if (seen.has(p.id) || !p.imageUrl) return false;
-            seen.add(p.id);
-            return true;
-          })
-          .slice(0, 4);
-
-        rawInsights = insightResults
-          .flatMap((places, i) => places.map((p) => mapApiPlace(p, userKw[i])))
-          .filter((p) => {
-            if (seen.has(p.id) || !p.imageUrl) return false;
-            seen.add(p.id);
-            return true;
-          })
-          .slice(0, 4)
-          .map((p) => ({
-            ...p,
-            badge: p.keywords[0],
-            peerNote: `Popular with ${p.keywords[0]} travelers`,
-          }));
-      } catch (e) {
-        throw e;
-      }
-    }
+    const seen = new Set();
+    const rawPicks = (
+      await searchByKeywords(forYouKeywords, 0, seen)
+    ).slice(0, 4);
+    const rawInsights = (
+      await searchByKeywords(communityKeywords, 3, seen)
+    ).slice(0, 4);
 
     const topPicks = rawPicks.map((p) => ({
       ...p,
-      overlayLine: buildOverlayLine(prefs, p),
+      overlayLine: buildOverlayLine(budget, forYouKeywords, p),
       isInWishlist: wishlistIds.has(p.id),
     }));
 
-    return { topPicks, communityInsights: rawInsights };
+    const communityInsights = rawInsights.map((p) => {
+      const keyword = p.keywords?.[0] ?? '';
+      const count = communityCountByKeyword.get(keyword) ?? 0;
+      const peerNote =
+        count >= 2
+          ? `Shared by ${count} travelers`
+          : 'Trending in the community';
+      return {
+        ...p,
+        badge: keyword,
+        peerNote,
+        isInWishlist: wishlistIds.has(p.id),
+      };
+    });
+
+    return { topPicks, communityInsights };
   },
 
   async fetchPlaceDetail(placeId, placeName) {

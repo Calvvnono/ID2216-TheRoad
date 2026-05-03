@@ -14,7 +14,8 @@ export function CommunityInsightsSection({ items = [], onPress }) {
 
   return (
     <View style={styles.section}>
-      <Text style={styles.title}>Community Insights</Text>
+      <Text style={styles.title}>Popular with Travelers</Text>
+      <Text style={styles.subtitle}>Aggregated from recent community journeys</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -58,6 +59,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: Colors.textPrimary,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
     marginBottom: 12,
   },
   row: {

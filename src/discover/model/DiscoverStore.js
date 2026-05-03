@@ -1,6 +1,8 @@
 import { makeAutoObservable, reaction, runInAction } from 'mobx';
 import { profileStore } from '../../profile/model/ProfileStore';
 import { ProfileService } from '../../profile/model/ProfileService';
+import { isDailyAwardSatisfied, XP_EVENT_KEYS } from '../../profile/model/xpSystem';
+import { journeysStore } from '../../journeys/model/JourneysStore';
 import { DiscoverService } from './DiscoverService';
 
 class DiscoverStoreClass {
@@ -32,24 +34,25 @@ class DiscoverStoreClass {
     makeAutoObservable(this);
     reaction(
       () => {
-        const prefs = profileStore.preferences;
-        if (!prefs) return null;
-        const activities = Array.isArray(prefs.favoriteActivities)
-          ? prefs.favoriteActivities.join('|')
-          : '';
-        return `${prefs.budgetPerDay}|${activities}`;
+        if (profileStore.loadStatus !== 'success') return null;
+        const journeysStatus = journeysStore.loadStatus;
+        if (journeysStatus !== 'success' && journeysStatus !== 'error') return null;
+        const budget = profileStore.preferences?.budgetPerDay ?? 200;
+        const forYou = profileStore.forYouKeywords.join('|');
+        return `${budget}|${forYou}`;
       },
       (signature, previousSignature) => {
         if (!signature || signature === previousSignature) return;
-        if (this.loadStatus === 'idle') return;
         void this.loadAll();
       },
     );
   }
 
   init() {
+    journeysStore.init();
+    profileStore.init();
     if (this.loadStatus === 'idle') {
-      this.loadAll();
+      this.loadStatus = 'loading';
     }
   }
 
@@ -58,8 +61,16 @@ class DiscoverStoreClass {
     this.errorMessage = null;
     try {
       const { topPicks, communityInsights } =
-        await DiscoverService.fetchDiscoverPage();
-      const discoverAward = await ProfileService.awardDailyDiscoverBrowseXp();
+        await DiscoverService.fetchDiscoverPage({
+          forYouKeywords: profileStore.forYouKeywords,
+          budget: profileStore.preferences?.budgetPerDay ?? 200,
+        });
+      const discoverAward = isDailyAwardSatisfied(
+        profileStore.profile?.xpMeta,
+        XP_EVENT_KEYS.DAILY_DISCOVER_BROWSE,
+      )
+        ? { isAwarded: false }
+        : await ProfileService.awardDailyDiscoverBrowseXp();
       if (discoverAward?.isAwarded) {
         await profileStore.refreshProfile();
       }
