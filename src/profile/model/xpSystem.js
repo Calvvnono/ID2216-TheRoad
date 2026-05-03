@@ -9,6 +9,15 @@ const TITLE_BY_LEVEL_RANGE = [
   { min: 9, max: 10, title: 'Legend Voyager' },
 ];
 
+export function isDailyAwardSatisfied(xpMeta, dailyCapKey, cap = 1) {
+  if (!xpMeta || typeof xpMeta !== 'object') return false;
+  if (!dailyCapKey) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  const date = String(xpMeta[`${dailyCapKey}Date`] || '');
+  const count = Number(xpMeta[`${dailyCapKey}Count`] || 0);
+  return date === today && count >= cap;
+}
+
 export const XP_EVENT_KEYS = {
   FIRST_PROFILE_BOOTSTRAP: 'first_profile_bootstrap',
   FIRST_BUDGET_SAVE: 'first_budget_save',

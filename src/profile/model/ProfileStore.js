@@ -1,7 +1,16 @@
 import * as ImagePicker from 'expo-image-picker';
 import { makeAutoObservable, runInAction } from 'mobx';
 import { ProfileService } from './ProfileService';
-import { computeProgress, XP_EVENT_KEYS } from './xpSystem';
+import {
+  computeProgress,
+  isDailyAwardSatisfied,
+  XP_EVENT_KEYS,
+} from './xpSystem';
+import {
+  DEFAULT_INTEREST_KEYWORDS,
+  deriveInterestBuckets,
+} from './interestKeywords';
+import { journeysStore } from '../../journeys/model/JourneysStore';
 
 class ProfileStoreClass {
   profile = null;
@@ -27,6 +36,22 @@ class ProfileStoreClass {
   budgetInputDraft = null;
 
   taskModalVisible = false;
+
+  get derivedInterestBuckets() {
+    return deriveInterestBuckets(journeysStore.journeys);
+  }
+
+  get interestTags() {
+    const all = this.derivedInterestBuckets.all;
+    if (all.length > 0) return all;
+    return DEFAULT_INTEREST_KEYWORDS;
+  }
+
+  get forYouKeywords() {
+    const searchable = this.derivedInterestBuckets.searchable;
+    if (searchable.length > 0) return searchable.slice(0, 3);
+    return DEFAULT_INTEREST_KEYWORDS.slice(0, 3);
+  }
 
   get profileViewModel() {
     const p = this.profile;
@@ -179,6 +204,7 @@ class ProfileStoreClass {
     if (this.loadStatus === 'idle') {
       this.loadAll();
     }
+    journeysStore.init();
   }
 
   async loadAll() {
@@ -191,7 +217,12 @@ class ProfileStoreClass {
         ProfileService.fetchWishlist(),
         ProfileService.fetchPreferences(),
       ]);
-      const signinAward = await ProfileService.awardDailySigninXp();
+      const signinAward = isDailyAwardSatisfied(
+        profile?.xpMeta,
+        XP_EVENT_KEYS.DAILY_SIGNIN,
+      )
+        ? { isAwarded: false }
+        : await ProfileService.awardDailySigninXp();
       const latestProfile = signinAward?.isAwarded
         ? await ProfileService.fetchProfile()
         : profile;

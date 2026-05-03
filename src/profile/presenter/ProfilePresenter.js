@@ -29,6 +29,10 @@ export const ProfilePresenter = {
     return profileStore.preferences;
   },
 
+  getInterestTags() {
+    return profileStore.interestTags;
+  },
+
   getExportStatus() {
     return profileStore.exportStatus;
   },

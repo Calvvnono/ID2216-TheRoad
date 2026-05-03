@@ -79,6 +79,7 @@ export const ProfileScreen = observer(function ProfileScreen() {
           {preferences ? (
             <PreferencePanel
               preferences={preferences}
+              interestTags={ProfilePresenter.getInterestTags()}
               budgetInput={ProfilePresenter.getBudgetInputValue()}
               onBudgetInputChange={ProfilePresenter.onBudgetInputChange}
               onBudgetSave={() =>
