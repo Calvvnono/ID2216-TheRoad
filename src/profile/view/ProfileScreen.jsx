@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, Image } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../shared/theme/colors';
@@ -10,6 +10,13 @@ import { WishlistCarousel } from './WishlistCarousel';
 import { PreferencePanel } from './PreferencePanel';
 import { PlaceDetailModal } from '../../discover/view/PlaceDetailModal';
 import { TaskModal } from './TaskModal';
+
+const APP_HEADER_LOGO = require('../../shared/assets/logo_pic.png');
+
+/** Match Discover / Journeys floating logo + clearance below */
+const HEADER_LOGO_TOP = 10;
+const HEADER_LOGO_SIZE = 80;
+const CONTENT_BELOW_LOGO = HEADER_LOGO_TOP + HEADER_LOGO_SIZE + 8;
 
 export const ProfileScreen = observer(function ProfileScreen() {
   useEffect(() => {
@@ -32,12 +39,7 @@ export const ProfileScreen = observer(function ProfileScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          The Road Goes Ever On
-        </Text>
-        <Text style={styles.headerSubtitle}>All the World's a Road</Text>
-      </View>
+      <Image source={APP_HEADER_LOGO} style={styles.floatingLogo} resizeMode="contain" />
 
       <StatusOverlay
         status={loadStatus}
@@ -100,31 +102,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
-    backgroundColor: Colors.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Colors.borderSubtle,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginHorizontal: 20,
-    marginTop: 8,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
+  floatingLogo: {
+    position: 'absolute',
+    top: HEADER_LOGO_TOP,
+    left: 20,
+    width: HEADER_LOGO_SIZE,
+    height: HEADER_LOGO_SIZE,
+    zIndex: 20,
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 20,
+    paddingTop: CONTENT_BELOW_LOGO,
     paddingBottom: 32,
   },
 });
