@@ -1,13 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  Pressable,
-  Alert,
-  Image,
-} from 'react-native';
+import { View, Text, FlatList, StyleSheet, Pressable, Alert } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -16,12 +8,6 @@ import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { JourneysPresenter } from '../presenter/JourneysPresenter';
 import { JourneyCard } from './JourneyCard';
 import { AddJourneyModal } from './AddJourneyModal';
-
-const APP_HEADER_LOGO = require('../../shared/assets/logo_pic.png');
-
-const HEADER_LOGO_TOP = 10;
-const HEADER_LOGO_SIZE = 80;
-const TITLE_BELOW_LOGO = HEADER_LOGO_TOP + HEADER_LOGO_SIZE + 8;
 
 const EMPTY_FORM = {
   destination: '',
@@ -142,7 +128,12 @@ export const JourneysScreen = observer(function JourneysScreen() {
 
   return (
     <View style={styles.screen}>
-      <Image source={APP_HEADER_LOGO} style={styles.floatingLogo} resizeMode="contain" />
+      <View style={styles.header}>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          The Road Goes Ever On
+        </Text>
+        <Text style={styles.headerSubtitle}>All the World's a Road</Text>
+      </View>
 
       <Text style={styles.pageTitle}>My Journeys</Text>
       <Text style={styles.pageSubtitle}>Tap a journey to view details</Text>
@@ -200,29 +191,36 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     paddingHorizontal: 20,
   },
-  floatingLogo: {
-    position: 'absolute',
-    top: HEADER_LOGO_TOP,
-    left: 20,
-    width: HEADER_LOGO_SIZE,
-    height: HEADER_LOGO_SIZE,
-    zIndex: 20,
+  header: {
+    backgroundColor: Colors.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.borderSubtle,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
   pageTitle: {
-    marginTop: TITLE_BELOW_LOGO,
+    marginTop: 18,
     fontSize: 40,
     fontWeight: '300',
     color: Colors.textPrimary,
-    textAlign: 'center',
-    width: '100%',
   },
   pageSubtitle: {
     marginTop: 4,
     marginBottom: 14,
     fontSize: 16,
     color: Colors.textSecondary,
-    textAlign: 'center',
-    width: '100%',
   },
   listContent: {
     paddingBottom: 110,
