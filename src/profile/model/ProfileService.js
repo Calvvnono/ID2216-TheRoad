@@ -30,6 +30,7 @@ const DEFAULT_PROFILE = {
 
 const INITIAL_XP = 40;
 const INITIAL_GRANTED_KEYS = [XP_EVENT_KEYS.FIRST_PROFILE_BOOTSTRAP];
+const TASK_SCHEMA_VERSION = 2;
 
 const DEFAULT_PREFERENCES = {
   budgetPerDay: 200,
@@ -60,13 +61,26 @@ function placeWishlistRef(uid, placeId) {
   return doc(db, `users/${uid}/wishlist/${placeId}`);
 }
 
-function normalizeProfileFromDoc(uid, data = {}) {
+function normalizeProfileFromDoc(uid, data = {}, options = {}) {
+  const { resetTaskProgress = false } = options;
   const totalXpRaw = Number(data.totalXp);
   const totalXp = Number.isFinite(totalXpRaw)
     ? Math.max(0, Math.round(totalXpRaw))
     : INITIAL_XP;
   const derivedLevel = levelFromXp(totalXp);
   const derivedTitle = titleForLevel(derivedLevel);
+
+  const normalizedGranted = Array.isArray(data.grantedXpKeys)
+    ? data.grantedXpKeys.filter((item) => typeof item === 'string' && item)
+    : INITIAL_GRANTED_KEYS;
+  const grantedXpKeys = resetTaskProgress
+    ? [...INITIAL_GRANTED_KEYS]
+    : Array.from(new Set(normalizedGranted));
+  const normalizedXpMeta =
+    data.xpMeta && typeof data.xpMeta === 'object' && !Array.isArray(data.xpMeta)
+      ? data.xpMeta
+      : {};
+  const xpMeta = resetTaskProgress ? {} : normalizedXpMeta;
 
   return {
     id: uid,
@@ -75,11 +89,8 @@ function normalizeProfileFromDoc(uid, data = {}) {
     badgeLabel: data.badgeLabel ?? derivedTitle,
     badgeLevel: data.badgeLevel ?? derivedLevel,
     totalXp,
-    grantedXpKeys: Array.isArray(data.grantedXpKeys)
-      ? data.grantedXpKeys
-      : INITIAL_GRANTED_KEYS,
-    xpMeta:
-      data.xpMeta && typeof data.xpMeta === 'object' ? data.xpMeta : {},
+    grantedXpKeys,
+    xpMeta,
   };
 }
 
@@ -88,12 +99,20 @@ async function ensureProfileDoc(uid) {
   const snap = await getDoc(ref);
   if (snap.exists()) {
     const data = snap.data();
-    const normalized = normalizeProfileFromDoc(uid, data);
+    const shouldResetTaskProgress =
+      Number(data.taskSchemaVersion || 0) < TASK_SCHEMA_VERSION;
+    const normalized = normalizeProfileFromDoc(uid, data, {
+      resetTaskProgress: shouldResetTaskProgress,
+    });
     const progress = computeProgress(normalized.totalXp);
 
     const needsBackfill =
       !Number.isFinite(Number(data.totalXp)) ||
       !Array.isArray(data.grantedXpKeys) ||
+      !data.xpMeta ||
+      typeof data.xpMeta !== 'object' ||
+      Array.isArray(data.xpMeta) ||
+      Number(data.taskSchemaVersion || 0) !== TASK_SCHEMA_VERSION ||
       data.badgeLevel !== progress.level ||
       data.badgeLabel !== progress.title;
 
@@ -104,6 +123,7 @@ async function ensureProfileDoc(uid) {
           totalXp: normalized.totalXp,
           grantedXpKeys: normalized.grantedXpKeys,
           xpMeta: normalized.xpMeta,
+          taskSchemaVersion: TASK_SCHEMA_VERSION,
           badgeLevel: progress.level,
           badgeLabel: progress.title,
           updatedAt: serverTimestamp(),
@@ -136,6 +156,7 @@ async function ensureProfileDoc(uid) {
       totalXp: INITIAL_XP,
       grantedXpKeys: INITIAL_GRANTED_KEYS,
       xpMeta: {},
+      taskSchemaVersion: TASK_SCHEMA_VERSION,
       badgeLabel: initialProgress.title,
       badgeLevel: initialProgress.level,
       createdAt: serverTimestamp(),
@@ -188,7 +209,11 @@ export const ProfileService = {
     return runTransaction(db, async (tx) => {
       const snap = await tx.get(refDoc);
       const existing = snap.exists() ? snap.data() : {};
-      const normalized = normalizeProfileFromDoc(resolvedUid, existing);
+      const shouldResetTaskProgress =
+        Number(existing.taskSchemaVersion || 0) < TASK_SCHEMA_VERSION;
+      const normalized = normalizeProfileFromDoc(resolvedUid, existing, {
+        resetTaskProgress: shouldResetTaskProgress,
+      });
 
       const grantedSet = new Set(normalized.grantedXpKeys);
       const xpMeta = { ...normalized.xpMeta };
@@ -257,6 +282,7 @@ export const ProfileService = {
           totalXp,
           grantedXpKeys: Array.from(grantedSet),
           xpMeta,
+          taskSchemaVersion: TASK_SCHEMA_VERSION,
           badgeLevel: nextLevel,
           badgeLabel: nextTitle,
           updatedAt: serverTimestamp(),

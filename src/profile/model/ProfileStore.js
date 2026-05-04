@@ -87,13 +87,16 @@ class ProfileStoreClass {
     );
     const xpMeta =
       profile.xpMeta && typeof profile.xpMeta === 'object' ? profile.xpMeta : {};
-    const today = new Date().toISOString().slice(0, 10);
-    const dailySigninDone =
-      String(xpMeta.daily_signinDate || '') === today &&
-      Number(xpMeta.daily_signinCount || 0) >= 1;
-    const dailyDiscoverDone =
-      String(xpMeta.daily_discover_browseDate || '') === today &&
-      Number(xpMeta.daily_discover_browseCount || 0) >= 1;
+    const dailySigninDone = isDailyAwardSatisfied(
+      xpMeta,
+      XP_EVENT_KEYS.DAILY_SIGNIN,
+      1,
+    );
+    const dailyDiscoverDone = isDailyAwardSatisfied(
+      xpMeta,
+      XP_EVENT_KEYS.DAILY_DISCOVER_BROWSE,
+      1,
+    );
 
     const taskSeed = [
       {
