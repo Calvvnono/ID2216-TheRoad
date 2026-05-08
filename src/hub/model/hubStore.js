@@ -3,7 +3,7 @@ import { AsyncStatus } from './asyncStatus';
 import HubService from './hubService';
 import {
   tripsTimeBounds,
-  filterTripsByTimeEnd,
+  filterTripsByTimeRange,
   tripRouteCoordinates,
 } from './tripModel';
 import { aggregateLocations, computeStats } from './locationModel';
@@ -11,18 +11,18 @@ import { aggregateLocations, computeStats } from './locationModel';
 /**
  * Hub application state (MobX observable).
  *
- * Time filter: single continuous slider 0..1 → cutoff between first trip start
- * and last trip end (see filteredTrips).
+ * Time filter: start/end continuous sliders (0..1) for a selected range
+ * between first trip start and last trip end.
  */
 class HubStore {
   /** @type {import('./tripModel').Trip[]} */
   trips = [];
 
-  /**
-   * 0 = earliest moment only, 1 = full timeline (default after load).
-   * @type {number}
-   */
-  timeSliderNormalized = 1;
+  /** @type {number} */
+  timeStartNormalized = 0;
+
+  /** @type {number} */
+  timeEndNormalized = 1;
 
   /** @type {string | null} */
   selectedLocationName = null;
@@ -37,15 +37,22 @@ class HubStore {
     makeAutoObservable(this);
   }
 
-  /** Cutoff timestamp (ms) derived from slider position and trip time bounds. */
-  get timeSliderCutoffMs() {
+  /** Start timestamp (ms) derived from start slider position and trip bounds. */
+  get timeStartMs() {
     const { minMs, maxMs } = tripsTimeBounds(this.trips);
     if (this.trips.length === 0 || maxMs <= minMs) return maxMs;
-    return minMs + this.timeSliderNormalized * (maxMs - minMs);
+    return minMs + this.timeStartNormalized * (maxMs - minMs);
+  }
+
+  /** End timestamp (ms) derived from end slider position and trip bounds. */
+  get timeEndMs() {
+    const { minMs, maxMs } = tripsTimeBounds(this.trips);
+    if (this.trips.length === 0 || maxMs <= minMs) return maxMs;
+    return minMs + this.timeEndNormalized * (maxMs - minMs);
   }
 
   get filteredTrips() {
-    return filterTripsByTimeEnd(this.trips, this.timeSliderCutoffMs);
+    return filterTripsByTimeRange(this.trips, this.timeStartMs, this.timeEndMs);
   }
 
   /** @returns {import('./locationModel').AggregatedLocation[]} */
@@ -83,7 +90,8 @@ class HubStore {
       const data = await HubService.fetchTrips();
       runInAction(() => {
         this.trips = data;
-        this.timeSliderNormalized = 1;
+        this.timeStartNormalized = 0;
+        this.timeEndNormalized = 1;
         this.loadStatus = AsyncStatus.SUCCESS;
       });
     } catch (err) {
@@ -94,9 +102,23 @@ class HubStore {
     }
   }
 
-  setTimeSliderNormalized(value) {
+  setTimeStartNormalized(value) {
     const v = Number(value);
-    this.timeSliderNormalized = Math.min(1, Math.max(0, v));
+    const clamped = Math.min(1, Math.max(0, v));
+    this.timeStartNormalized = Math.min(clamped, this.timeEndNormalized);
+    this.selectedLocationName = null;
+  }
+
+  setTimeEndNormalized(value) {
+    const v = Number(value);
+    const clamped = Math.min(1, Math.max(0, v));
+    this.timeEndNormalized = Math.max(clamped, this.timeStartNormalized);
+    this.selectedLocationName = null;
+  }
+
+  resetTimeRange() {
+    this.timeStartNormalized = 0;
+    this.timeEndNormalized = 1;
     this.selectedLocationName = null;
   }
 

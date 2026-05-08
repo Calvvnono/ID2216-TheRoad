@@ -29,6 +29,10 @@ export const ProfilePresenter = {
     return profileStore.preferences;
   },
 
+  getInterestTags() {
+    return profileStore.interestTags;
+  },
+
   getExportStatus() {
     return profileStore.exportStatus;
   },
@@ -80,5 +84,21 @@ export const ProfilePresenter = {
 
   getWishlistDetailStatus() {
     return profileStore.wishlistDetailStatus;
+  },
+
+  onOpenTaskModal() {
+    profileStore.openTaskModal();
+  },
+
+  onCloseTaskModal() {
+    profileStore.closeTaskModal();
+  },
+
+  getTaskModalVisible() {
+    return profileStore.taskModalVisible;
+  },
+
+  getTaskList() {
+    return profileStore.taskListViewModel;
   },
 };

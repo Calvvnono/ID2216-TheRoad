@@ -53,14 +53,13 @@ async function handleResponse(res) {
 }
 
 export const placesClient = {
-  async searchText(keyword, budget, regionIndex = 0) {
+  async searchText(keyword, regionIndex = 0) {
     const region = WORLD_REGIONS[regionIndex % WORLD_REGIONS.length];
-    const budgetLabel = budget <= 100 ? 'budget' : budget <= 250 ? 'mid-range' : 'luxury';
     const res = await fetch(`${BASE}/places:searchText`, {
       method: 'POST',
       headers: headers(TEXT_SEARCH_FIELDS),
       body: JSON.stringify({
-        textQuery: `famous ${keyword} ${budgetLabel} travel destinations ${region}`,
+        textQuery: `famous ${keyword} travel destinations ${region}`,
         languageCode: 'en',
         maxResultCount: 5,
       }),

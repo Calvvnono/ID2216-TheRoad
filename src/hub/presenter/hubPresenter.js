@@ -45,15 +45,28 @@ const HubPresenter = {
     return loc ? toJS(loc) : null;
   },
 
-  get timeSliderNormalized() { return hubStore.timeSliderNormalized; },
+  get timeStartNormalized() { return hubStore.timeStartNormalized; },
+  get timeEndNormalized()   { return hubStore.timeEndNormalized; },
 
-  /** Cutoff instant formatted for display, e.g. "Oct 2024". */
-  get timeSliderDateLabel() {
-    const cutoff = hubStore.timeSliderCutoffMs;
+  /** Start instant formatted for display, e.g. "Oct 2024". */
+  get timeStartDateLabel() {
+    const startMs = hubStore.timeStartMs;
     if (!hubStore.filteredTrips.length && hubStore.loadStatus === AsyncStatus.SUCCESS) {
       return '—';
     }
-    return new Date(cutoff).toLocaleDateString('en-US', {
+    return new Date(startMs).toLocaleDateString('en-US', {
+      month: 'short',
+      year: 'numeric',
+    });
+  },
+
+  /** End instant formatted for display, e.g. "Dec 2024". */
+  get timeEndDateLabel() {
+    const endMs = hubStore.timeEndMs;
+    if (!hubStore.filteredTrips.length && hubStore.loadStatus === AsyncStatus.SUCCESS) {
+      return '—';
+    }
+    return new Date(endMs).toLocaleDateString('en-US', {
       month: 'short',
       year: 'numeric',
     });
@@ -65,8 +78,16 @@ const HubPresenter = {
     hubStore.ensureLoaded();
   },
 
-  onTimeSliderChange(value) {
-    hubStore.setTimeSliderNormalized(value);
+  onTimeStartChange(value) {
+    hubStore.setTimeStartNormalized(value);
+  },
+
+  onTimeEndChange(value) {
+    hubStore.setTimeEndNormalized(value);
+  },
+
+  onResetTimeRange() {
+    hubStore.resetTimeRange();
   },
 
   onMarkerPress(locationName) {

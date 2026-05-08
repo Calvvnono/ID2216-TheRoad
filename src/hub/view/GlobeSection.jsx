@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Platform, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import Slider from '@react-native-community/slider';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  PanResponder,
+  Platform,
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius } from '../../shared/theme';
 import GlobeMap from './GlobeMap';
@@ -11,20 +17,84 @@ import GlobeMap from './GlobeMap';
  */
 function GlobeSection({
   selectedLocationName: selected,
-  timeSliderNormalized: storeNorm,
+  timeStartNormalized: storeStartNorm,
+  timeEndNormalized: storeEndNorm,
   aggregatedLocationsPlain: locations,
   routeCoordinatesPlain: routeCoords,
-  timeSliderDateLabel: dateLabel,
+  timeStartDateLabel: startDateLabel,
+  timeEndDateLabel: endDateLabel,
   onMarkerPress,
-  onTimeSliderChange,
+  onTimeStartChange,
+  onTimeEndChange,
+  onResetTimeRange,
 }) {
+  const THUMB_SIZE = 22;
+  const clamp01 = (value) => Math.min(1, Math.max(0, value));
 
-  const [slideLocal, setSlideLocal] = useState(storeNorm);
+  const [startLocal, setStartLocal] = useState(storeStartNorm);
+  const [endLocal, setEndLocal] = useState(storeEndNorm);
+  const [axisWidth, setAxisWidth] = useState(0);
+  const startLocalRef = useRef(storeStartNorm);
+  const endLocalRef = useRef(storeEndNorm);
+  const startDragBaseRef = useRef(storeStartNorm);
+  const endDragBaseRef = useRef(storeEndNorm);
   useEffect(() => {
-    setSlideLocal(storeNorm);
-  }, [storeNorm]);
+    setStartLocal(storeStartNorm);
+    startLocalRef.current = storeStartNorm;
+  }, [storeStartNorm]);
+  useEffect(() => {
+    setEndLocal(storeEndNorm);
+    endLocalRef.current = storeEndNorm;
+  }, [storeEndNorm]);
 
-  const fitKey = `${storeNorm}|${locations.map((l) => l.id).join(',')}`;
+  const fitKey = `${storeStartNorm}|${storeEndNorm}|${locations.map((l) => l.id).join(',')}`;
+  const rangeLeft = `${Math.round(startLocal * 100)}%`;
+  const rangeRight = `${Math.round((1 - endLocal) * 100)}%`;
+  const axisUsableWidth = Math.max(1, axisWidth - THUMB_SIZE);
+  const startThumbLeft = startLocal * axisUsableWidth;
+  const endThumbLeft = endLocal * axisUsableWidth;
+
+  const startPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
+        onPanResponderGrant: () => {
+          startDragBaseRef.current = startLocalRef.current;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const delta = gestureState.dx / axisUsableWidth;
+          const next = clamp01(startDragBaseRef.current + delta);
+          const clamped = Math.min(next, endLocalRef.current);
+          startLocalRef.current = clamped;
+          setStartLocal(clamped);
+          onTimeStartChange(clamped);
+        },
+        onPanResponderTerminationRequest: () => false,
+      }),
+    [axisUsableWidth, onTimeStartChange],
+  );
+
+  const endPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
+        onPanResponderGrant: () => {
+          endDragBaseRef.current = endLocalRef.current;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const delta = gestureState.dx / axisUsableWidth;
+          const next = clamp01(endDragBaseRef.current + delta);
+          const clamped = Math.max(next, startLocalRef.current);
+          endLocalRef.current = clamped;
+          setEndLocal(clamped);
+          onTimeEndChange(clamped);
+        },
+        onPanResponderTerminationRequest: () => false,
+      }),
+    [axisUsableWidth, onTimeEndChange],
+  );
 
   return (
     <View style={styles.stage}>
@@ -49,32 +119,49 @@ function GlobeSection({
             <Text style={styles.timeTitle}>Time Machine</Text>
           </View>
           <Text style={styles.timeDate} numberOfLines={1}>
-            {dateLabel}
+            {startDateLabel} - {endDateLabel}
           </Text>
           <TouchableOpacity
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={() => {
-              setSlideLocal(1);
-              onTimeSliderChange(1);
+              setStartLocal(0);
+              setEndLocal(1);
+              startLocalRef.current = 0;
+              endLocalRef.current = 1;
+              onResetTimeRange();
             }}
           >
             <Text style={styles.showAll}>Show All</Text>
           </TouchableOpacity>
         </View>
 
-        <Slider
-          style={styles.slider}
-          minimumValue={0}
-          maximumValue={1}
-          value={slideLocal}
-          onValueChange={(v) => {
-            setSlideLocal(v);
-            onTimeSliderChange(v);
-          }}
-          minimumTrackTintColor={Colors.primary}
-          maximumTrackTintColor={Colors.surfaceLight}
-          thumbTintColor={Colors.primary}
-        />
+        <View style={styles.rangeMetaRow}>
+          <Text style={styles.sliderLabel}>Start: {startDateLabel}</Text>
+          <Text style={styles.sliderLabel}>End: {endDateLabel}</Text>
+        </View>
+
+        <View
+          style={styles.rangeAxis}
+          onLayout={(e) => setAxisWidth(e.nativeEvent.layout.width)}
+        >
+          <View style={[styles.rangeHighlight, { left: rangeLeft, right: rangeRight }]} />
+          <View
+            style={[
+              styles.thumb,
+              styles.startThumb,
+              { left: startThumbLeft, width: THUMB_SIZE, height: THUMB_SIZE },
+            ]}
+            {...startPanResponder.panHandlers}
+          />
+          <View
+            style={[
+              styles.thumb,
+              styles.endThumb,
+              { left: endThumbLeft, width: THUMB_SIZE, height: THUMB_SIZE },
+            ]}
+            {...endPanResponder.panHandlers}
+          />
+        </View>
       </View>
     </View>
   );
@@ -142,9 +229,53 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flexShrink: 0,
   },
-  slider: {
+  rangeMetaRow: {
+    marginTop: 2,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  rangeAxis: {
+    marginTop: 8,
     width: '100%',
-    height: 44,
+    height: 34,
+    borderRadius: 999,
+    backgroundColor: Colors.surfaceLight,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  rangeHighlight: {
+    position: 'absolute',
+    top: 10,
+    bottom: 10,
+    borderRadius: 999,
+    backgroundColor: Colors.primarySoft,
+  },
+  thumb: {
+    position: 'absolute',
+    top: 6,
+    borderRadius: BorderRadius.full,
+    borderWidth: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  startThumb: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.surface,
+    zIndex: 3,
+  },
+  endThumb: {
+    borderColor: Colors.secondary,
+    backgroundColor: Colors.surface,
+    zIndex: 4,
+  },
+  sliderLabel: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    fontSize: 12,
   },
 });
 

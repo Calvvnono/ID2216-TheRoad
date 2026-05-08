@@ -1,6 +1,16 @@
 import * as ImagePicker from 'expo-image-picker';
 import { makeAutoObservable, runInAction } from 'mobx';
 import { ProfileService } from './ProfileService';
+import {
+  computeProgress,
+  isDailyAwardSatisfied,
+  XP_EVENT_KEYS,
+} from './xpSystem';
+import {
+  DEFAULT_INTEREST_KEYWORDS,
+  deriveInterestBuckets,
+} from './interestKeywords';
+import { journeysStore } from '../../journeys/model/JourneysStore';
 
 class ProfileStoreClass {
   profile = null;
@@ -25,10 +35,168 @@ class ProfileStoreClass {
 
   budgetInputDraft = null;
 
+  taskModalVisible = false;
+
+  get derivedInterestBuckets() {
+    return deriveInterestBuckets(journeysStore.journeys);
+  }
+
+  get interestTags() {
+    const all = this.derivedInterestBuckets.all;
+    if (all.length > 0) return all;
+    return DEFAULT_INTEREST_KEYWORDS;
+  }
+
+  get forYouKeywords() {
+    const searchable = this.derivedInterestBuckets.searchable;
+    if (searchable.length > 0) return searchable.slice(0, 3);
+    return DEFAULT_INTEREST_KEYWORDS.slice(0, 3);
+  }
+
   get profileViewModel() {
     const p = this.profile;
     if (!p) return null;
-    return { ...p, badgeLabelText: `${p.badgeLabel} Level ${p.badgeLevel}` };
+    const progress = computeProgress(p.totalXp);
+    return {
+      ...p,
+      badgeLevel: progress.level,
+      badgeLabel: progress.title,
+      badgeLabelText: `${progress.title} Level ${progress.level}`,
+      isMaxLevel: progress.isMaxLevel,
+      progressPercent: Math.round(progress.progress * 100),
+      xpIntoLevel: progress.xpIntoLevel,
+      xpNeededThisLevel: progress.xpNeededThisLevel,
+      xpToNextLevel: progress.xpToNextLevel,
+      totalXp: p.totalXp,
+    };
+  }
+
+  get taskListViewModel() {
+    const profile = this.profile;
+    if (!profile) {
+      return {
+        completed: [],
+        pending: [],
+        dailyCompleted: [],
+        dailyPending: [],
+      };
+    }
+
+    const granted = new Set(
+      Array.isArray(profile.grantedXpKeys) ? profile.grantedXpKeys : [],
+    );
+    const xpMeta =
+      profile.xpMeta && typeof profile.xpMeta === 'object' ? profile.xpMeta : {};
+    const dailySigninDone = isDailyAwardSatisfied(
+      xpMeta,
+      XP_EVENT_KEYS.DAILY_SIGNIN,
+      1,
+    );
+    const dailyDiscoverDone = isDailyAwardSatisfied(
+      xpMeta,
+      XP_EVENT_KEYS.DAILY_DISCOVER_BROWSE,
+      1,
+    );
+
+    const taskSeed = [
+      {
+        key: XP_EVENT_KEYS.FIRST_PROFILE_BOOTSTRAP,
+        title: 'First profile bootstrap',
+        xp: 40,
+        completed: granted.has(XP_EVENT_KEYS.FIRST_PROFILE_BOOTSTRAP),
+      },
+      {
+        key: XP_EVENT_KEYS.FIRST_BUDGET_SAVE,
+        title: 'Save budget for the first time',
+        xp: 40,
+        completed: granted.has(XP_EVENT_KEYS.FIRST_BUDGET_SAVE),
+      },
+      {
+        key: XP_EVENT_KEYS.FIRST_AVATAR_UPLOAD,
+        title: 'Upload avatar for the first time',
+        xp: 40,
+        completed: granted.has(XP_EVENT_KEYS.FIRST_AVATAR_UPLOAD),
+      },
+      {
+        key: XP_EVENT_KEYS.FIRST_EXPORT,
+        title: 'Export profile data for the first time',
+        xp: 20,
+        completed: granted.has(XP_EVENT_KEYS.FIRST_EXPORT),
+      },
+      {
+        key: XP_EVENT_KEYS.FIRST_JOURNEY_CREATE,
+        title: 'Create first journey',
+        xp: 120,
+        completed: granted.has(XP_EVENT_KEYS.FIRST_JOURNEY_CREATE),
+      },
+      {
+        key: XP_EVENT_KEYS.FIRST_JOURNEY_EDIT,
+        title: 'Edit first journey',
+        xp: 60,
+        completed: granted.has(XP_EVENT_KEYS.FIRST_JOURNEY_EDIT),
+      },
+      {
+        key: XP_EVENT_KEYS.FIRST_JOURNEY_PHOTO_MILESTONE,
+        title: 'Reach 3 photos in a journey',
+        xp: 50,
+        completed: granted.has(XP_EVENT_KEYS.FIRST_JOURNEY_PHOTO_MILESTONE),
+      },
+      {
+        key: XP_EVENT_KEYS.FIRST_JOURNEY_BGM_MATCH,
+        title: 'Trigger first BGM match',
+        xp: 40,
+        completed: granted.has(XP_EVENT_KEYS.FIRST_JOURNEY_BGM_MATCH),
+      },
+    ];
+
+    return {
+      completed: taskSeed.filter((item) => item.completed),
+      pending: taskSeed.filter((item) => !item.completed),
+      dailyCompleted: [
+        ...(dailySigninDone
+          ? [
+              {
+                key: XP_EVENT_KEYS.DAILY_SIGNIN,
+                title: 'Daily check-in',
+                subtitle: 'Signed in today',
+                xp: 10,
+              },
+            ]
+          : []),
+        ...(dailyDiscoverDone
+          ? [
+              {
+                key: XP_EVENT_KEYS.DAILY_DISCOVER_BROWSE,
+                title: 'Browse Discover today',
+                subtitle: 'Daily Discover browsing completed',
+                xp: 10,
+              },
+            ]
+          : []),
+      ],
+      dailyPending: [
+        ...(!dailySigninDone
+          ? [
+              {
+                key: XP_EVENT_KEYS.DAILY_SIGNIN,
+                title: 'Daily check-in',
+                subtitle: 'Open profile once per day',
+                xp: 10,
+              },
+            ]
+          : []),
+        ...(!dailyDiscoverDone
+          ? [
+              {
+                key: XP_EVENT_KEYS.DAILY_DISCOVER_BROWSE,
+                title: 'Browse Discover today',
+                subtitle: 'Open Discover page once per day',
+                xp: 10,
+              },
+            ]
+          : []),
+      ],
+    };
   }
 
   constructor() {
@@ -39,6 +207,7 @@ class ProfileStoreClass {
     if (this.loadStatus === 'idle') {
       this.loadAll();
     }
+    journeysStore.init();
   }
 
   async loadAll() {
@@ -51,9 +220,18 @@ class ProfileStoreClass {
         ProfileService.fetchWishlist(),
         ProfileService.fetchPreferences(),
       ]);
+      const signinAward = isDailyAwardSatisfied(
+        profile?.xpMeta,
+        XP_EVENT_KEYS.DAILY_SIGNIN,
+      )
+        ? { isAwarded: false }
+        : await ProfileService.awardDailySigninXp();
+      const latestProfile = signinAward?.isAwarded
+        ? await ProfileService.fetchProfile()
+        : profile;
 
       runInAction(() => {
-        this.profile = profile;
+        this.profile = latestProfile;
         this.wishlist = wishlist;
         this.preferences = preferences;
         this.loadStatus = 'success';
@@ -75,6 +253,17 @@ class ProfileStoreClass {
       });
     } catch {
       /* keep existing wishlist */
+    }
+  }
+
+  async refreshProfile() {
+    try {
+      const profile = await ProfileService.fetchProfile();
+      runInAction(() => {
+        this.profile = profile;
+      });
+    } catch {
+      /* keep existing profile */
     }
   }
 
@@ -107,11 +296,24 @@ class ProfileStoreClass {
     this.wishlistDetailStatus = 'idle';
   }
 
+  openTaskModal() {
+    this.taskModalVisible = true;
+  }
+
+  closeTaskModal() {
+    this.taskModalVisible = false;
+  }
+
   async updatePreferences(newPrefs) {
     try {
       await ProfileService.savePreferences(newPrefs);
+      if (Object.prototype.hasOwnProperty.call(newPrefs, 'budgetPerDay')) {
+        await ProfileService.awardBudgetSavedXp();
+      }
+      const refreshedProfile = await ProfileService.fetchProfile();
       runInAction(() => {
         this.preferences = { ...this.preferences, ...newPrefs };
+        this.profile = refreshedProfile;
         if ('budgetPerDay' in newPrefs) {
           this.budgetInputDraft = null;
         }
@@ -168,8 +370,13 @@ class ProfileStoreClass {
 
     try {
       await ProfileService.exportUserData();
+      const [_, refreshedProfile] = await Promise.all([
+        ProfileService.awardExportXp(),
+        ProfileService.fetchProfile(),
+      ]);
       runInAction(() => {
         this.exportStatus = 'success';
+        this.profile = refreshedProfile;
       });
     } catch (e) {
       runInAction(() => {

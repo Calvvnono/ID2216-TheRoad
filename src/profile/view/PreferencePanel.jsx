@@ -4,11 +4,13 @@ import { Colors } from '../../shared/theme/colors';
 
 export function PreferencePanel({
   preferences,
+  interestTags,
   budgetInput,
   onBudgetInputChange,
   onBudgetSave,
 }) {
   const budgetDisplay = `$${preferences.budgetPerDay}/day`;
+  const tags = Array.isArray(interestTags) ? interestTags : [];
 
   return (
     <View style={styles.card}>
@@ -41,13 +43,20 @@ export function PreferencePanel({
 
       <View style={styles.divider} />
 
-      <Text style={styles.rowLabel}>Favorite Activities</Text>
+      <Text style={styles.rowLabel}>Your Travel Style</Text>
+      <Text style={styles.helperText}>Derived from your journeys</Text>
       <View style={styles.tagWrap}>
-        {preferences.favoriteActivities.map((tag) => (
-          <View key={tag} style={styles.tag}>
-            <Text style={styles.tagText}>{tag}</Text>
-          </View>
-        ))}
+        {tags.length === 0 ? (
+          <Text style={styles.emptyText}>
+            Upload a journey to personalize your interests.
+          </Text>
+        ) : (
+          tags.map((tag) => (
+            <View key={tag} style={styles.tag}>
+              <Text style={styles.tagText}>{tag}</Text>
+            </View>
+          ))
+        )}
       </View>
     </View>
   );
@@ -113,6 +122,15 @@ const styles = StyleSheet.create({
     color: Colors.surface,
     fontSize: 12,
     fontWeight: '600',
+  },
+  helperText: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  emptyText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
   },
   tagWrap: {
     flexDirection: 'row',
