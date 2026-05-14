@@ -1,4 +1,5 @@
 import { profileStore } from '../model/ProfileStore';
+import { authPersistence } from '../../auth/persistence/authPersistence';
 
 export const ProfilePresenter = {
   init() {
@@ -100,5 +101,9 @@ export const ProfilePresenter = {
 
   getTaskList() {
     return profileStore.taskListViewModel;
+  },
+
+  onSignOut() {
+    authPersistence.signOut();
   },
 };

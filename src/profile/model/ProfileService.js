@@ -1,6 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { getDownloadURL, ref } from 'firebase/storage';
-import { signInAnonymously } from 'firebase/auth';
 import { placesClient } from '../../shared/api/placesClient';
 import {
   collection,
@@ -38,11 +37,11 @@ const DEFAULT_PREFERENCES = {
   favoriteActivities: ['Culture', 'Adventure', 'Food', 'Nature', 'Photography'],
 };
 
-async function ensureUid(uidArg) {
+function ensureUid(uidArg) {
   if (typeof uidArg === 'string' && uidArg) return uidArg;
-  if (auth.currentUser?.uid) return auth.currentUser.uid;
-  const cred = await signInAnonymously(auth);
-  return cred.user.uid;
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('User not authenticated');
+  return uid;
 }
 
 function userRef(uid) {
@@ -203,7 +202,7 @@ async function ensurePreferencesDoc(uid) {
 
 export const ProfileService = {
   async awardXpByRule(rule, uidArg) {
-    const resolvedUid = await ensureUid(uidArg);
+    const resolvedUid = ensureUid(uidArg);
     const refDoc = userRef(resolvedUid);
 
     return runTransaction(db, async (tx) => {
@@ -391,7 +390,7 @@ export const ProfileService = {
   },
 
   async fetchProfile(uid) {
-    const resolvedUid = await ensureUid(uid);
+    const resolvedUid = ensureUid(uid);
     const base = await ensureProfileDoc(resolvedUid);
     const progress = computeProgress(base.totalXp);
     return {
@@ -407,7 +406,7 @@ export const ProfileService = {
   },
 
   async fetchWishlist(uid) {
-    const resolvedUid = await ensureUid(uid);
+    const resolvedUid = ensureUid(uid);
     const snap = await getDocs(wishlistRef(resolvedUid));
     return snap.docs.map((d) => {
       const data = d.data();
@@ -422,7 +421,7 @@ export const ProfileService = {
   },
 
   async addWishlistItem(item, uid) {
-    const resolvedUid = await ensureUid(uid);
+    const resolvedUid = ensureUid(uid);
     const placeId = item.id;
     if (!placeId) throw new Error('Wishlist item requires id');
     const placeRef = placeWishlistRef(resolvedUid, placeId);
@@ -445,19 +444,19 @@ export const ProfileService = {
   },
 
   async removeWishlistItem(placeId, uid) {
-    const resolvedUid = await ensureUid(uid);
+    const resolvedUid = ensureUid(uid);
     await deleteDoc(doc(db, `users/${resolvedUid}/wishlist/${placeId}`));
   },
 
   async fetchPreferences(uid) {
-    const resolvedUid = await ensureUid(uid);
+    const resolvedUid = ensureUid(uid);
     return ensurePreferencesDoc(resolvedUid);
   },
 
   async savePreferences(uidOrPrefs, maybePrefs) {
     const maybeUid = typeof uidOrPrefs === 'string' ? uidOrPrefs : undefined;
     const prefs = maybeUid ? maybePrefs : uidOrPrefs;
-    const resolvedUid = await ensureUid(maybeUid);
+    const resolvedUid = ensureUid(maybeUid);
     await setDoc(
       prefsRef(resolvedUid),
       {
@@ -469,7 +468,7 @@ export const ProfileService = {
   },
 
   async updateProfilePatch(patch, uid) {
-    const resolvedUid = await ensureUid(uid);
+    const resolvedUid = ensureUid(uid);
     const payload = {
       updatedAt: serverTimestamp(),
     };
@@ -487,7 +486,7 @@ export const ProfileService = {
 
   async uploadAvatar(localUri, uid) {
     if (!localUri) throw new Error('Missing local image uri');
-    const resolvedUid = await ensureUid(uid);
+    const resolvedUid = ensureUid(uid);
 
     const token = await auth.currentUser.getIdToken();
     const bucket = 'the-road-goes-ever-on.firebasestorage.app';
@@ -545,7 +544,7 @@ export const ProfileService = {
   },
 
   async exportUserData(uid) {
-    const resolvedUid = await ensureUid(uid);
+    const resolvedUid = ensureUid(uid);
     const [profile, preferences, wishlist] = await Promise.all([
       this.fetchProfile(resolvedUid),
       this.fetchPreferences(resolvedUid),
