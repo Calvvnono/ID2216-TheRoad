@@ -2,7 +2,6 @@ import { useLayoutEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { observer } from 'mobx-react-lite';
 import {
   Colors,
   Typography,
@@ -10,18 +9,38 @@ import {
   CommonStyles,
   BorderRadius,
 } from '../../shared/theme';
-import HubPresenter from '../presenter/hubPresenter';
 import GlobeSection from './GlobeSection';
 import StatsCards from './StatsCards';
 import LocationSheet from './LocationSheet';
 
-/** Hub dashboard: sole view that imports HubPresenter; children are props-driven. */
-function HubScreen() {
+/** Hub dashboard view. Presenter passes all data and callbacks as props. */
+function HubScreen({
+  isAwaitingData,
+  isError,
+  isSuccess,
+  error,
+  selectedLocationName,
+  timeStartNormalized,
+  timeEndNormalized,
+  aggregatedLocationsPlain,
+  routeCoordinatesPlain,
+  timeStartDateLabel,
+  timeEndDateLabel,
+  selectedLocationPlain,
+  stats,
+  onInit,
+  onMarkerPress,
+  onTimeStartChange,
+  onTimeEndChange,
+  onResetTimeRange,
+  onSheetDismiss,
+  onRetry,
+}) {
   const [dashboardOpen, setDashboardOpen] = useState(false);
 
   useLayoutEffect(() => {
-    HubPresenter.init();
-  }, []);
+    onInit();
+  }, [onInit]);
 
   return (
     <GestureHandlerRootView style={styles.gestureRoot}>
@@ -34,44 +53,44 @@ function HubScreen() {
               </Text>
             </View>
 
-            {HubPresenter.isAwaitingData && (
+            {isAwaitingData && (
               <View style={styles.centered}>
                 <ActivityIndicator size="large" color={Colors.primary} />
                 <Text style={styles.statusText}>Loading your journeys…</Text>
               </View>
             )}
 
-            {HubPresenter.isError && (
+            {isError && (
               <View style={styles.centered}>
                 <View style={styles.errorIcon}>
                   <Text style={styles.errorIconText}>!</Text>
                 </View>
                 <Text style={styles.statusText}>
-                  {HubPresenter.error || 'Something went wrong.'}
+                  {error || 'Something went wrong.'}
                 </Text>
                 <TouchableOpacity
                   style={styles.retryButton}
-                  onPress={HubPresenter.onRetry}
+                  onPress={onRetry}
                 >
                   <Text style={styles.retryText}>Try Again</Text>
                 </TouchableOpacity>
               </View>
             )}
 
-            {HubPresenter.isSuccess && (
+            {isSuccess && (
               <View style={styles.body}>
                 <GlobeSection
-                  selectedLocationName={HubPresenter.selectedLocationName}
-                  timeStartNormalized={HubPresenter.timeStartNormalized}
-                  timeEndNormalized={HubPresenter.timeEndNormalized}
-                  aggregatedLocationsPlain={HubPresenter.aggregatedLocationsPlain}
-                  routeCoordinatesPlain={HubPresenter.routeCoordinatesPlain}
-                  timeStartDateLabel={HubPresenter.timeStartDateLabel}
-                  timeEndDateLabel={HubPresenter.timeEndDateLabel}
-                  onMarkerPress={HubPresenter.onMarkerPress}
-                  onTimeStartChange={HubPresenter.onTimeStartChange}
-                  onTimeEndChange={HubPresenter.onTimeEndChange}
-                  onResetTimeRange={HubPresenter.onResetTimeRange}
+                  selectedLocationName={selectedLocationName}
+                  timeStartNormalized={timeStartNormalized}
+                  timeEndNormalized={timeEndNormalized}
+                  aggregatedLocationsPlain={aggregatedLocationsPlain}
+                  routeCoordinatesPlain={routeCoordinatesPlain}
+                  timeStartDateLabel={timeStartDateLabel}
+                  timeEndDateLabel={timeEndDateLabel}
+                  onMarkerPress={onMarkerPress}
+                  onTimeStartChange={onTimeStartChange}
+                  onTimeEndChange={onTimeEndChange}
+                  onResetTimeRange={onResetTimeRange}
                 />
 
                 <TouchableOpacity
@@ -95,16 +114,16 @@ function HubScreen() {
                   />
                 </TouchableOpacity>
 
-                {dashboardOpen && <StatsCards stats={HubPresenter.stats} />}
+                {dashboardOpen && <StatsCards stats={stats} />}
               </View>
             )}
           </View>
 
-          {HubPresenter.isSuccess && (
+          {isSuccess && (
             <LocationSheet
-              selectedLocationName={HubPresenter.selectedLocationName}
-              selectedLocation={HubPresenter.selectedLocationPlain}
-              onSheetDismiss={HubPresenter.onSheetDismiss}
+              selectedLocationName={selectedLocationName}
+              selectedLocation={selectedLocationPlain}
+              onSheetDismiss={onSheetDismiss}
             />
           )}
         </View>
@@ -173,4 +192,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default observer(HubScreen);
+export default HubScreen;

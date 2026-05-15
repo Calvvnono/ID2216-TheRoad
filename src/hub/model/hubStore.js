@@ -1,6 +1,5 @@
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable } from 'mobx';
 import { AsyncStatus } from './asyncStatus';
-import HubService from './hubService';
 import {
   tripsTimeBounds,
   filterTripsByTimeRange,
@@ -81,25 +80,21 @@ class HubStore {
 
   // ── Actions ───────────────────────────────────────────
 
-  async loadTrips() {
-    runInAction(() => {
-      this.loadStatus = AsyncStatus.LOADING;
-      this.error = null;
-    });
-    try {
-      const data = await HubService.fetchTrips();
-      runInAction(() => {
-        this.trips = data;
-        this.timeStartNormalized = 0;
-        this.timeEndNormalized = 1;
-        this.loadStatus = AsyncStatus.SUCCESS;
-      });
-    } catch (err) {
-      runInAction(() => {
-        this.error = err?.message || 'Failed to load trips';
-        this.loadStatus = AsyncStatus.ERROR;
-      });
-    }
+  setLoadStarted() {
+    this.loadStatus = AsyncStatus.LOADING;
+    this.error = null;
+  }
+
+  setTripsLoaded(data) {
+    this.trips = data;
+    this.timeStartNormalized = 0;
+    this.timeEndNormalized = 1;
+    this.loadStatus = AsyncStatus.SUCCESS;
+  }
+
+  setLoadError(message) {
+    this.error = message;
+    this.loadStatus = AsyncStatus.ERROR;
   }
 
   setTimeStartNormalized(value) {
@@ -130,15 +125,6 @@ class HubStore {
     this.selectedLocationName = null;
   }
 
-  retry() {
-    this.loadTrips();
-  }
-
-  ensureLoaded() {
-    if (this.loadStatus === AsyncStatus.IDLE) {
-      this.loadTrips();
-    }
-  }
 }
 
 const hubStore = new HubStore();

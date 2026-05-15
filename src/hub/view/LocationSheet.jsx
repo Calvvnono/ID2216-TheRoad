@@ -28,7 +28,7 @@ const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
  * Bottom sheet showing details for a selected location.
  * Uses RN Modal + Animated instead of @gorhom/bottom-sheet
  * so it works in Expo Go without native worklets.
- * Props from HubScreen (HubPresenter).
+ * Props from HubScreen.
  */
 function LocationSheet({ selectedLocationName: selectedName, selectedLocation: location, onSheetDismiss }) {
   const slideAnim = useRef(new Animated.Value(SHEET_HEIGHT)).current;

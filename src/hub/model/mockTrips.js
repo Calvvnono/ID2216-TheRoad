@@ -1,5 +1,5 @@
 /**
- * Hub demo trips — aligned with `MOCK_JOURNEYS` in `journeys/model/JourneysService.js`:
+ * Hub demo trips — aligned with the journeys persistence shape:
  * per-day amounts only (same shape as Firestore `dailyExpenses`), not category breakdown.
  * @type {import('./tripModel').Trip[]}
  */

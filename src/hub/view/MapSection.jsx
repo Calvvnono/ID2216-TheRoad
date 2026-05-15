@@ -12,7 +12,7 @@ import MapLocationPill from './MapLocationPill';
  * Shows visited locations as tappable cards with visit stats.
  * Polyline route replaced by numbered sequence badges.
  *
- * Not currently wired in HubScreen; if used, pass props from HubScreen (HubPresenter).
+ * Not currently wired in HubScreen; if used, pass props from HubScreen.
  */
 function MapSection({
   aggregatedLocationsPlain: locations,

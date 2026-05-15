@@ -4,7 +4,7 @@ import HubStatCard from './HubStatCard';
 
 /**
  * Horizontal row of summary statistics for filtered trips.
- * Stats object passed from HubScreen (HubPresenter.stats).
+ * Stats object passed from HubScreen.
  */
 function StatsCards({ stats }) {
   const { totalTrips, totalDays, totalExpenses } = stats;
