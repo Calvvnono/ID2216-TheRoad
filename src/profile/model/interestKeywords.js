@@ -1,7 +1,10 @@
-const WEIGHT_ACTIVITY = 3;
+// Personal For You: style signals (BGM tags) take priority; location is fallback
+const WEIGHT_ACTIVITY = 4;
 const WEIGHT_CUSTOM = 3;
-const WEIGHT_MOOD = 2;
-const WEIGHT_COUNTRY = 1;
+const WEIGHT_COUNTRY = 2;
+const WEIGHT_DESTINATION = 2;
+const WEIGHT_VISITED = 1;
+const WEIGHT_MOOD = 1;
 
 export const DEFAULT_INTEREST_KEYWORDS = [
   'culture',
@@ -42,18 +45,28 @@ export function deriveInterestBuckets(journeys) {
   const searchableWeights = new Map();
 
   journeys.forEach((journey) => {
+    // Primary: country and destination — always filled, directly searchable
+    if (journey?.country) {
+      accumulate(allWeights, [journey.country], WEIGHT_COUNTRY);
+      accumulate(searchableWeights, [journey.country], WEIGHT_COUNTRY);
+    }
+    if (journey?.destination) {
+      accumulate(allWeights, [journey.destination], WEIGHT_DESTINATION);
+      accumulate(searchableWeights, [journey.destination], WEIGHT_DESTINATION);
+    }
+
+    // Secondary: visited locations — commonly filled
+    if (Array.isArray(journey?.visitedLocations)) {
+      accumulate(allWeights, journey.visitedLocations, WEIGHT_VISITED);
+      accumulate(searchableWeights, journey.visitedLocations, WEIGHT_VISITED);
+    }
+
+    // Supplementary: BGM fields — optional, used when present
     accumulate(allWeights, journey?.bgmActivityTags, WEIGHT_ACTIVITY);
     accumulate(allWeights, journey?.bgmCustomKeywords, WEIGHT_CUSTOM);
     accumulate(allWeights, journey?.bgmMoodTags, WEIGHT_MOOD);
-    if (journey?.country) {
-      accumulate(allWeights, [journey.country], WEIGHT_COUNTRY);
-    }
-
     accumulate(searchableWeights, journey?.bgmActivityTags, WEIGHT_ACTIVITY);
     accumulate(searchableWeights, journey?.bgmCustomKeywords, WEIGHT_CUSTOM);
-    if (journey?.country) {
-      accumulate(searchableWeights, [journey.country], WEIGHT_COUNTRY);
-    }
   });
 
   return {
@@ -70,19 +83,40 @@ export function aggregateCommunityKeywordCounts(journeys) {
   const counts = new Map();
   if (!Array.isArray(journeys)) return counts;
 
+  function add(token, weight) {
+    const normalized = normalizeToken(token);
+    if (!normalized) return;
+    counts.set(normalized, (counts.get(normalized) || 0) + weight);
+  }
+
   journeys.forEach((journey) => {
-    const tokens = [
+    // Primary: country names (weight 4) — most reliable, searchable via Places API
+    if (journey?.country) add(journey.country, 4);
+
+    // Secondary: destination city (weight 3)
+    if (journey?.destination) add(journey.destination, 3);
+
+    // Tertiary: visited locations (weight 2) — deduplicated per journey
+    const visited = Array.isArray(journey?.visitedLocations) ? journey.visitedLocations : [];
+    const seenVisited = new Set();
+    visited.forEach((loc) => {
+      const normalized = normalizeToken(loc);
+      if (!normalized || seenVisited.has(normalized)) return;
+      seenVisited.add(normalized);
+      counts.set(normalized, (counts.get(normalized) || 0) + 2);
+    });
+
+    // Supplementary: BGM activity tags (weight 1) — may add interest variety
+    const bgmTokens = [
       ...(Array.isArray(journey?.bgmActivityTags) ? journey.bgmActivityTags : []),
       ...(Array.isArray(journey?.bgmCustomKeywords) ? journey.bgmCustomKeywords : []),
     ];
-    const unique = new Set();
-    tokens.forEach((token) => {
+    const seenBgm = new Set();
+    bgmTokens.forEach((token) => {
       const normalized = normalizeToken(token);
-      if (!normalized) return;
-      unique.add(normalized);
-    });
-    unique.forEach((token) => {
-      counts.set(token, (counts.get(token) || 0) + 1);
+      if (!normalized || seenBgm.has(normalized)) return;
+      seenBgm.add(normalized);
+      counts.set(normalized, (counts.get(normalized) || 0) + 1);
     });
   });
 

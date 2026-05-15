@@ -21,44 +21,12 @@ const DiscoverPresenter = {
     DiscoverPersistence.updateWishlistLiked(place, false);
   },
 
-  getLoadStatus() {
-    return discoverStore.loadStatus;
-  },
-
-  getErrorMessage() {
-    return discoverStore.errorMessage;
-  },
-
-  getTopPicks() {
-    return discoverStore.topPicksViewModel;
-  },
-
-  getCommunityInsights() {
-    return discoverStore.communityInsights;
-  },
-
-  getWishToggleStatus() {
-    return discoverStore.wishToggleStatus;
-  },
-
   onPlacePress(place) {
     DiscoverPersistence.openPlaceDetail(place);
   },
 
   onCloseDetail() {
     discoverStore.closeDetail();
-  },
-
-  getSelectedPlace() {
-    return discoverStore.selectedPlace;
-  },
-
-  getPlaceDetail() {
-    return discoverStore.placeDetail;
-  },
-
-  getDetailStatus() {
-    return discoverStore.detailStatus;
   },
 };
 
@@ -72,15 +40,21 @@ const discoverPresenterProps = {
 };
 
 function DiscoverPresenterView() {
+  const topPicks = discoverStore.topPicks.map((place) => ({
+    ...place,
+    heartIconName: place.isInWishlist ? 'heart' : 'heart-outline',
+    heartActive: !!place.isInWishlist,
+    isToggling: !!discoverStore.wishTogglingMap[place.id],
+  }));
+
   const props = {
-    loadStatus: DiscoverPresenter.getLoadStatus(),
-    errorMessage: DiscoverPresenter.getErrorMessage(),
-    topPicks: DiscoverPresenter.getTopPicks(),
-    communityInsights: DiscoverPresenter.getCommunityInsights(),
-    wishToggleStatus: DiscoverPresenter.getWishToggleStatus(),
-    selectedPlace: DiscoverPresenter.getSelectedPlace(),
-    placeDetail: DiscoverPresenter.getPlaceDetail(),
-    detailStatus: DiscoverPresenter.getDetailStatus(),
+    loadStatus: discoverStore.loadStatus,
+    errorMessage: discoverStore.errorMessage,
+    topPicks,
+    communityInsights: discoverStore.communityInsights,
+    selectedPlace: discoverStore.selectedPlace,
+    placeDetail: discoverStore.placeDetail,
+    detailStatus: discoverStore.detailStatus,
     ...discoverPresenterProps,
   };
 

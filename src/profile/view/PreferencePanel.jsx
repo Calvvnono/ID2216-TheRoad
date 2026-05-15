@@ -1,16 +1,16 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Colors } from '../../shared/theme/colors';
 
 export function PreferencePanel({
   preferences,
   interestTags,
-  budgetInput,
-  onBudgetInputChange,
-  onBudgetSave,
+  totalSpent,
+  avgDailyBudget,
+  journeyCount,
 }) {
-  const budgetDisplay = `$${preferences.budgetPerDay}/day`;
   const tags = Array.isArray(interestTags) ? interestTags : [];
+  const hasJourneys = journeyCount > 0;
 
   return (
     <View style={styles.card}>
@@ -18,37 +18,42 @@ export function PreferencePanel({
 
       <View style={styles.divider} />
 
-      <View style={styles.row}>
-        <View>
-          <Text style={styles.rowLabel}>Budget Limits</Text>
-          <Text style={styles.rowValue}>{budgetDisplay}</Text>
+      <Text style={styles.rowLabel}>Spending Overview</Text>
+      <Text style={styles.helperText}>Calculated from your journey data</Text>
+
+      {hasJourneys ? (
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>${totalSpent.toLocaleString()}</Text>
+            <Text style={styles.statLabel}>Total spent</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>${avgDailyBudget}/day</Text>
+            <Text style={styles.statLabel}>Avg. daily spend</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{journeyCount}</Text>
+            <Text style={styles.statLabel}>
+              {journeyCount === 1 ? 'Journey' : 'Journeys'}
+            </Text>
+          </View>
         </View>
-        <View style={styles.inlineEditor}>
-          <TextInput
-            value={budgetInput}
-            onChangeText={onBudgetInputChange}
-            keyboardType="number-pad"
-            style={styles.budgetInput}
-            placeholder="Budget"
-            placeholderTextColor={Colors.textTertiary}
-          />
-          <Pressable
-            style={styles.saveButton}
-            onPress={onBudgetSave}
-          >
-            <Text style={styles.saveButtonText}>Save</Text>
-          </Pressable>
-        </View>
-      </View>
+      ) : (
+        <Text style={styles.emptyText}>
+          Add journeys to see your spending stats.
+        </Text>
+      )}
 
       <View style={styles.divider} />
 
       <Text style={styles.rowLabel}>Your Travel Style</Text>
-      <Text style={styles.helperText}>Derived from your journeys</Text>
+      <Text style={styles.helperText}>Derived from your journey tags</Text>
       <View style={styles.tagWrap}>
         {tags.length === 0 ? (
           <Text style={styles.emptyText}>
-            Upload a journey to personalize your interests.
+            Create journeys with tags to personalize your travel style.
           </Text>
         ) : (
           tags.map((tag) => (
@@ -81,52 +86,44 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.borderSubtle,
     marginVertical: 14,
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
   rowLabel: {
     fontSize: 14,
     fontWeight: '500',
     color: Colors.textPrimary,
     marginBottom: 4,
   },
-  rowValue: {
-    fontSize: 14,
-    color: Colors.primary,
-  },
-  inlineEditor: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  budgetInput: {
-    width: 86,
-    borderWidth: 1,
-    borderColor: Colors.borderDefault,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    color: Colors.textPrimary,
-    textAlign: 'center',
-    fontSize: 13,
-  },
-  saveButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  saveButtonText: {
-    color: Colors.surface,
-    fontSize: 12,
-    fontWeight: '600',
-  },
   helperText: {
     fontSize: 11,
     color: Colors.textTertiary,
+    marginBottom: 10,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderSubtle,
+    paddingVertical: 12,
+  },
+  statBox: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
     marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: Colors.borderSubtle,
   },
   emptyText: {
     fontSize: 12,
@@ -136,7 +133,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 10,
+    marginTop: 2,
   },
   tag: {
     backgroundColor: Colors.chipBg,

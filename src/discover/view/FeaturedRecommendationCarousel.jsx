@@ -7,7 +7,6 @@ import {
   Pressable,
   StyleSheet,
   Dimensions,
-  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,7 +19,6 @@ export function FeaturedRecommendationCarousel({
   onCardPress,
   onLike,
   onUnlike,
-  toggleStatus,
 }) {
   const screenW = Dimensions.get('window').width;
   const CARD_W = screenW - 40;
@@ -55,7 +53,7 @@ export function FeaturedRecommendationCarousel({
             <Pressable
               style={styles.btnPass}
               onPress={() => onUnlike?.(item)}
-              disabled={toggleStatus === 'loading'}
+              disabled={item.isToggling}
               accessibilityLabel="Remove from wishlist"
             >
               <Text style={styles.btnPassIcon}>✕</Text>
@@ -63,7 +61,7 @@ export function FeaturedRecommendationCarousel({
             <Pressable
               style={[styles.btnHeart, item.heartActive && styles.btnHeartActive]}
               onPress={() => onLike?.(item)}
-              disabled={toggleStatus === 'loading'}
+              disabled={item.isToggling}
               accessibilityLabel="Save to wishlist"
             >
               <Ionicons
@@ -115,9 +113,6 @@ export function FeaturedRecommendationCarousel({
           <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
         ))}
       </View>
-      {toggleStatus === 'loading' && (
-        <ActivityIndicator color={Colors.primary} style={styles.spinner} />
-      )}
     </View>
   );
 }
@@ -266,8 +261,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center',
-  },
-  spinner: {
-    marginTop: 6,
   },
 });

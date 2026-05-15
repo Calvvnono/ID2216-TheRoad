@@ -68,6 +68,20 @@ export const placesClient = {
     return data.places ?? [];
   },
 
+  async searchByQuery(textQuery) {
+    const res = await fetch(`${BASE}/places:searchText`, {
+      method: 'POST',
+      headers: headers(TEXT_SEARCH_FIELDS),
+      body: JSON.stringify({
+        textQuery,
+        languageCode: 'en',
+        maxResultCount: 5,
+      }),
+    });
+    const data = await handleResponse(res);
+    return data.places ?? [];
+  },
+
   async searchByName(name) {
     const res = await fetch(`${BASE}/places:searchText`, {
       method: 'POST',
