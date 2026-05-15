@@ -1,10 +1,8 @@
 import React, { useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Image, TouchableOpacity, Text } from 'react-native';
-import { observer } from 'mobx-react-lite';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
-import { ProfilePresenter } from '../presenter/ProfilePresenter';
 import { ProfileHeader } from './ProfileHeader';
 import { WishlistCarousel } from './WishlistCarousel';
 import { PreferencePanel } from './PreferencePanel';
@@ -18,24 +16,42 @@ const HEADER_LOGO_TOP = 10;
 const HEADER_LOGO_SIZE = 80;
 const CONTENT_BELOW_LOGO = HEADER_LOGO_TOP + HEADER_LOGO_SIZE + 8;
 
-export const ProfileScreen = observer(function ProfileScreen() {
+export function ProfileScreen({
+  loadStatus,
+  errorMessage,
+  profile,
+  wishlist,
+  preferences,
+  interestTags,
+  avatarUploadStatus,
+  budgetInputValue,
+  wishlistDetailPlace,
+  wishlistPlaceDetail,
+  wishlistDetailStatus,
+  taskModalVisible,
+  taskList,
+  onInit,
+  onReload,
+  onUpdateBudgetPerDay,
+  onPickAvatar,
+  onBudgetInputChange,
+  onWishlistItemPress,
+  onCloseWishlistDetail,
+  onOpenTaskModal,
+  onCloseTaskModal,
+  onSignOut,
+}) {
   useEffect(() => {
-    ProfilePresenter.init();
-  }, []);
+    onInit();
+  }, [onInit]);
 
   useFocusEffect(
     React.useCallback(() => {
-      ProfilePresenter.reload();
-    }, []),
+      onReload();
+    }, [onReload]),
   );
 
-  const loadStatus = ProfilePresenter.getLoadStatus();
-  const errorMessage = ProfilePresenter.getErrorMessage();
-  const profile = ProfilePresenter.getProfile();
-  const wishlist = ProfilePresenter.getWishlist();
-  const preferences = ProfilePresenter.getPreferences();
-  const isUploading =
-    ProfilePresenter.getAvatarUploadStatus() === 'loading';
+  const isUploading = avatarUploadStatus === 'loading';
 
   return (
     <View style={styles.screen}>
@@ -43,7 +59,7 @@ export const ProfileScreen = observer(function ProfileScreen() {
 
       <StatusOverlay
         status={loadStatus}
-        onRetry={() => ProfilePresenter.reload()}
+        onRetry={onReload}
         errorMessage={errorMessage}
       >
         <ScrollView
@@ -54,47 +70,43 @@ export const ProfileScreen = observer(function ProfileScreen() {
           {profile ? (
             <ProfileHeader
               profile={profile}
-              onUploadAvatar={() => ProfilePresenter.onPickAvatar()}
+              onUploadAvatar={onPickAvatar}
               isUploading={isUploading}
-              onOpenTasks={() => ProfilePresenter.onOpenTaskModal()}
+              onOpenTasks={onOpenTaskModal}
             />
           ) : null}
 
           <TaskModal
-            visible={ProfilePresenter.getTaskModalVisible()}
-            tasks={ProfilePresenter.getTaskList()}
-            onClose={() => ProfilePresenter.onCloseTaskModal()}
+            visible={taskModalVisible}
+            tasks={taskList}
+            onClose={onCloseTaskModal}
           />
 
           <WishlistCarousel
             wishlist={wishlist}
-            onItemPress={(item) => ProfilePresenter.onWishlistItemPress(item)}
+            onItemPress={onWishlistItemPress}
           />
 
           <PlaceDetailModal
-            place={ProfilePresenter.getWishlistDetailPlace()}
-            detail={ProfilePresenter.getWishlistPlaceDetail()}
-            detailStatus={ProfilePresenter.getWishlistDetailStatus()}
-            onClose={() => ProfilePresenter.onCloseWishlistDetail()}
+            place={wishlistDetailPlace}
+            detail={wishlistPlaceDetail}
+            detailStatus={wishlistDetailStatus}
+            onClose={onCloseWishlistDetail}
           />
 
           {preferences ? (
             <PreferencePanel
               preferences={preferences}
-              interestTags={ProfilePresenter.getInterestTags()}
-              budgetInput={ProfilePresenter.getBudgetInputValue()}
-              onBudgetInputChange={ProfilePresenter.onBudgetInputChange}
-              onBudgetSave={() =>
-                ProfilePresenter.onUpdateBudgetPerDay(
-                  ProfilePresenter.getBudgetInputValue(),
-                )
-              }
+              interestTags={interestTags}
+              budgetInput={budgetInputValue}
+              onBudgetInputChange={onBudgetInputChange}
+              onBudgetSave={() => onUpdateBudgetPerDay(budgetInputValue)}
             />
           ) : null}
 
           <TouchableOpacity
             style={styles.signOutBtn}
-            onPress={() => ProfilePresenter.onSignOut()}
+            onPress={onSignOut}
             activeOpacity={0.8}
           >
             <Text style={styles.signOutText}>Sign Out</Text>
@@ -103,7 +115,7 @@ export const ProfileScreen = observer(function ProfileScreen() {
       </StatusOverlay>
     </View>
   );
-});
+}
 
 const styles = StyleSheet.create({
   screen: {
