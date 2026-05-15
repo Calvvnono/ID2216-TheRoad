@@ -1,3 +1,3 @@
-import { ProfileScreen } from '../profile/view/ProfileScreen';
+import ProfilePresenter from '../profile/presenter/ProfilePresenter';
 
-export default ProfileScreen;
+export default ProfilePresenter;

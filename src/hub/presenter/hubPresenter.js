@@ -1,13 +1,16 @@
+import React from 'react';
 import { toJS } from 'mobx';
+import { observer } from 'mobx-react-lite';
 import hubStore from '../model/hubStore';
 import { AsyncStatus } from '../model/asyncStatus';
+import HubPersistence from '../persistence/hubPersistence';
+import HubScreen from '../view/HubScreen';
 
 /**
  * Hub presenter — the ONLY bridge between View and Model.
  *
- * HubScreen (observer) reads from these getters and passes values
- * into child view components via props. Sub-views must not import
- * hubStore, MobX, HubPresenter, or any Model / persistence module.
+ * This Presenter reads from hubStore and passes values into HubScreen as props.
+ * Sub-views must not import hubStore, MobX, or persistence modules.
  */
 const HubPresenter = {
 
@@ -74,10 +77,6 @@ const HubPresenter = {
 
   // ── Actions (View calls) ──────────────────────────────
 
-  init() {
-    hubStore.ensureLoaded();
-  },
-
   onTimeStartChange(value) {
     hubStore.setTimeStartNormalized(value);
   },
@@ -99,8 +98,40 @@ const HubPresenter = {
   },
 
   onRetry() {
-    hubStore.retry();
+    HubPersistence.retry();
   },
 };
 
-export default HubPresenter;
+function HubPresenterView() {
+  const props = {
+    isAwaitingData: HubPresenter.isAwaitingData,
+    isError: HubPresenter.isError,
+    isSuccess: HubPresenter.isSuccess,
+    error: HubPresenter.error,
+    selectedLocationName: HubPresenter.selectedLocationName,
+    timeStartNormalized: HubPresenter.timeStartNormalized,
+    timeEndNormalized: HubPresenter.timeEndNormalized,
+    aggregatedLocationsPlain: HubPresenter.aggregatedLocationsPlain,
+    routeCoordinatesPlain: HubPresenter.routeCoordinatesPlain,
+    timeStartDateLabel: HubPresenter.timeStartDateLabel,
+    timeEndDateLabel: HubPresenter.timeEndDateLabel,
+    selectedLocationPlain: HubPresenter.selectedLocationPlain,
+    stats: HubPresenter.stats,
+    onInit: hubPresenterProps.onInit,
+    onMarkerPress: HubPresenter.onMarkerPress,
+    onTimeStartChange: HubPresenter.onTimeStartChange,
+    onTimeEndChange: HubPresenter.onTimeEndChange,
+    onResetTimeRange: HubPresenter.onResetTimeRange,
+    onSheetDismiss: HubPresenter.onSheetDismiss,
+    onRetry: hubPresenterProps.onRetry,
+  };
+
+  return <HubScreen {...props} />;
+}
+
+const hubPresenterProps = {
+  onInit: () => HubPersistence.ensureLoaded(),
+  onRetry: () => HubPresenter.onRetry(),
+};
+
+export default observer(HubPresenterView);

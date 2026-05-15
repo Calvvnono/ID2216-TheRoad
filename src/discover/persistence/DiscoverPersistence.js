@@ -1,13 +1,20 @@
 import { collectionGroup, getDocs, limit, query } from 'firebase/firestore';
-import { ProfileService } from '../../profile/model/ProfileService';
+import { reaction } from 'mobx';
+import { profileStore } from '../../profile/model/ProfileStore';
+import { ProfilePersistence } from '../../profile/persistence/ProfilePersistence';
 import {
   aggregateCommunityKeywordCounts,
   pickCommunityKeywordCounts,
 } from '../../profile/model/interestKeywords';
+import { isDailyAwardSatisfied, XP_EVENT_KEYS } from '../../profile/model/xpSystem';
+import { journeysStore } from '../../journeys/model/JourneysStore';
+import { JourneysPersistence } from '../../journeys/persistence/JourneysPersistence';
+import { discoverStore } from '../model/DiscoverStore';
 import { placesClient } from '../../shared/api/placesClient';
 import { db } from '../../shared/api/firebaseClient';
 
 const COMMUNITY_SAMPLE_SIZE = 120;
+let hasStartedDiscoverReaction = false;
 
 function mapApiPlace(place, keyword) {
   return {
@@ -62,10 +69,85 @@ async function searchByKeywords(keywords, offset, seen) {
     });
 }
 
-export const DiscoverService = {
+export const DiscoverPersistence = {
+  init() {
+    this.startAutoReload();
+    JourneysPersistence.init();
+    ProfilePersistence.init();
+    if (discoverStore.loadStatus === 'idle') {
+      discoverStore.setLoadStarted();
+    }
+  },
+
+  startAutoReload() {
+    if (hasStartedDiscoverReaction) return;
+    hasStartedDiscoverReaction = true;
+    reaction(
+      () => {
+        if (profileStore.loadStatus !== 'success') return null;
+        const journeysStatus = journeysStore.loadStatus;
+        if (journeysStatus !== 'success' && journeysStatus !== 'error') return null;
+        const budget = profileStore.preferences?.budgetPerDay ?? 200;
+        const forYou = profileStore.forYouKeywords.join('|');
+        return `${budget}|${forYou}`;
+      },
+      (signature, previousSignature) => {
+        if (!signature || signature === previousSignature) return;
+        void this.loadAll();
+      },
+    );
+  },
+
+  async loadAll() {
+    discoverStore.setLoadStarted();
+    try {
+      const { topPicks, communityInsights } =
+        await this.fetchDiscoverPage({
+          forYouKeywords: profileStore.forYouKeywords,
+          budget: profileStore.preferences?.budgetPerDay ?? 200,
+        });
+      const discoverAward = isDailyAwardSatisfied(
+        profileStore.profile?.xpMeta,
+        XP_EVENT_KEYS.DAILY_DISCOVER_BROWSE,
+      )
+        ? { isAwarded: false }
+        : await ProfilePersistence.awardDailyDiscoverBrowseXp();
+      if (discoverAward?.isAwarded) {
+        await ProfilePersistence.refreshProfile();
+      }
+      discoverStore.setDiscoverData(topPicks, communityInsights);
+    } catch (e) {
+      discoverStore.setLoadError(e.message ?? 'Failed to load discover data');
+    }
+  },
+
+  async updateWishlistLiked(place, liked) {
+    if (!!place.isInWishlist === liked) return;
+    discoverStore.setWishToggleStarted();
+    try {
+      await this.setWishlistLiked(place, liked);
+      discoverStore.setTopPickLiked(place.id, liked);
+      ProfilePersistence.refreshWishlist();
+    } catch (e) {
+      discoverStore.setWishToggleError(e.message ?? 'Could not update wishlist');
+    }
+  },
+
+  async openPlaceDetail(place) {
+    discoverStore.setSelectedPlaceLoading({
+      id: place.id,
+      name: place.name,
+      country: place.country,
+      imageUrl: place.imageUrl,
+      whyVisit: place.reason ?? null,
+    });
+    const detail = await this.fetchPlaceDetail(place.id, place.name);
+    discoverStore.setPlaceDetail(detail);
+  },
+
   async fetchDiscoverPage({ forYouKeywords = [], budget = 200 } = {}) {
     const [wishlist, communitySample] = await Promise.all([
-      ProfileService.fetchWishlist(),
+      ProfilePersistence.fetchWishlist(),
       fetchCommunityJourneySample(),
     ]);
     const wishlistIds = new Set(wishlist.map((w) => w.id));
@@ -129,14 +211,14 @@ export const DiscoverService = {
 
   async setWishlistLiked(place, liked) {
     if (liked) {
-      await ProfileService.addWishlistItem({
+      await ProfilePersistence.addWishlistItem({
         id: place.id,
         name: place.name,
         imageUrl: place.imageUrl,
         keywords: place.keywords ?? [],
       });
     } else {
-      await ProfileService.removeWishlistItem(place.id);
+      await ProfilePersistence.removeWishlistItem(place.id);
     }
   },
 };

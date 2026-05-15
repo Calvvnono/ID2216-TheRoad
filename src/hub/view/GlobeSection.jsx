@@ -13,7 +13,7 @@ import GlobeMap from './GlobeMap';
 
 /**
  * Globe + time slider. All data and actions come from HubScreen via props
- * (HubScreen reads from HubPresenter).
+ * (HubScreen receives these values from its Presenter).
  */
 function GlobeSection({
   selectedLocationName: selected,

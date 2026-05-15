@@ -1,16 +1,20 @@
+import React from 'react';
+import { observer } from 'mobx-react-lite';
 import { journeysStore } from '../model/JourneysStore';
+import { JourneysPersistence } from '../persistence/JourneysPersistence';
+import { JourneysScreen } from '../view/JourneysScreen';
 
-export const JourneysPresenter = {
+const JourneysPresenter = {
   init() {
-    journeysStore.init();
+    JourneysPersistence.init();
   },
 
   reload() {
-    journeysStore.retry();
+    JourneysPersistence.retry();
   },
 
   onCreateJourney(input) {
-    journeysStore.createJourney(input);
+    JourneysPersistence.saveNewJourney(input);
   },
 
   resetCreateState() {
@@ -40,3 +44,25 @@ export const JourneysPresenter = {
     }));
   },
 };
+
+const journeysPresenterProps = {
+  onInit: () => JourneysPresenter.init(),
+  onReload: () => JourneysPresenter.reload(),
+  onCreateJourney: (input) => JourneysPresenter.onCreateJourney(input),
+  onResetCreateState: () => JourneysPresenter.resetCreateState(),
+};
+
+function JourneysPresenterView() {
+  const props = {
+    loadStatus: JourneysPresenter.getLoadStatus(),
+    errorMessage: JourneysPresenter.getErrorMessage(),
+    createStatus: JourneysPresenter.getCreateStatus(),
+    createErrorMessage: JourneysPresenter.getCreateErrorMessage(),
+    journeys: JourneysPresenter.getJourneys(),
+    ...journeysPresenterProps,
+  };
+
+  return <JourneysScreen {...props} />;
+}
+
+export default observer(JourneysPresenterView);

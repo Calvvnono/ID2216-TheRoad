@@ -1,13 +1,19 @@
+import React from 'react';
+import { observer } from 'mobx-react-lite';
 import { profileStore } from '../model/ProfileStore';
+import { ProfilePersistence } from '../persistence/ProfilePersistence';
 import { authPersistence } from '../../auth/persistence/authPersistence';
+import { JourneysPersistence } from '../../journeys/persistence/JourneysPersistence';
+import { ProfileScreen } from '../view/ProfileScreen';
 
-export const ProfilePresenter = {
+const ProfilePresenter = {
   init() {
-    profileStore.init();
+    ProfilePersistence.init();
+    JourneysPersistence.init();
   },
 
   reload() {
-    profileStore.loadAll();
+    ProfilePersistence.loadAll();
   },
 
   getLoadStatus() {
@@ -39,19 +45,21 @@ export const ProfilePresenter = {
   },
 
   onExportData() {
-    profileStore.exportData();
+    ProfilePersistence.exportData();
   },
 
   onUpdatePreferences(newPrefs) {
-    profileStore.updatePreferences(newPrefs);
+    ProfilePersistence.updatePreferences(newPrefs);
   },
 
   onUpdateBudgetPerDay(budgetPerDay) {
-    profileStore.updateBudgetPerDay(budgetPerDay);
+    const nextPrefs = profileStore.updateBudgetPerDayValue(budgetPerDay);
+    if (!nextPrefs) return false;
+    return ProfilePersistence.updatePreferences(nextPrefs);
   },
 
   onPickAvatar() {
-    profileStore.pickAndUploadAvatar();
+    ProfilePersistence.pickAndUploadAvatar();
   },
 
   getAvatarUploadStatus() {
@@ -68,7 +76,7 @@ export const ProfilePresenter = {
   },
 
   onWishlistItemPress(item) {
-    profileStore.openWishlistPlaceDetail(item);
+    ProfilePersistence.openWishlistPlaceDetail(item);
   },
 
   onCloseWishlistDetail() {
@@ -107,3 +115,42 @@ export const ProfilePresenter = {
     authPersistence.signOut();
   },
 };
+
+const profilePresenterProps = {
+  onInit: () => ProfilePresenter.init(),
+  onReload: () => ProfilePresenter.reload(),
+  onExportData: () => ProfilePresenter.onExportData(),
+  onUpdateBudgetPerDay: (budgetPerDay) =>
+    ProfilePresenter.onUpdateBudgetPerDay(budgetPerDay),
+  onPickAvatar: () => ProfilePresenter.onPickAvatar(),
+  onBudgetInputChange: (value) => ProfilePresenter.onBudgetInputChange(value),
+  onWishlistItemPress: (item) => ProfilePresenter.onWishlistItemPress(item),
+  onCloseWishlistDetail: () => ProfilePresenter.onCloseWishlistDetail(),
+  onOpenTaskModal: () => ProfilePresenter.onOpenTaskModal(),
+  onCloseTaskModal: () => ProfilePresenter.onCloseTaskModal(),
+  onSignOut: () => ProfilePresenter.onSignOut(),
+};
+
+function ProfilePresenterView() {
+  const props = {
+    loadStatus: ProfilePresenter.getLoadStatus(),
+    errorMessage: ProfilePresenter.getErrorMessage(),
+    profile: ProfilePresenter.getProfile(),
+    wishlist: ProfilePresenter.getWishlist(),
+    preferences: ProfilePresenter.getPreferences(),
+    interestTags: ProfilePresenter.getInterestTags(),
+    exportStatus: ProfilePresenter.getExportStatus(),
+    avatarUploadStatus: ProfilePresenter.getAvatarUploadStatus(),
+    budgetInputValue: ProfilePresenter.getBudgetInputValue(),
+    wishlistDetailPlace: ProfilePresenter.getWishlistDetailPlace(),
+    wishlistPlaceDetail: ProfilePresenter.getWishlistPlaceDetail(),
+    wishlistDetailStatus: ProfilePresenter.getWishlistDetailStatus(),
+    taskModalVisible: ProfilePresenter.getTaskModalVisible(),
+    taskList: ProfilePresenter.getTaskList(),
+    ...profilePresenterProps,
+  };
+
+  return <ProfileScreen {...props} />;
+}
+
+export default observer(ProfilePresenterView);

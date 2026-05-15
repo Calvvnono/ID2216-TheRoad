@@ -1,20 +1,25 @@
+import React from 'react';
+import { observer } from 'mobx-react-lite';
 import { journeysStore } from '../model/JourneysStore';
+import { JourneysPersistence } from '../persistence/JourneysPersistence';
+import { JourneyPlaybackPersistence } from '../persistence/JourneyPlaybackPersistence';
+import { JourneyDetailScreen } from '../view/JourneyDetailScreen';
 
-export const JourneyDetailPresenter = {
+const JourneyDetailPresenter = {
   init() {
-    journeysStore.init();
+    JourneysPersistence.init();
   },
 
   reload() {
-    journeysStore.retry();
+    JourneysPersistence.retry();
   },
 
   onUpdateJourney(input) {
-    journeysStore.updateJourney(input);
+    JourneysPersistence.saveJourneyUpdate(input);
   },
 
   ensureBgmTrack(journeyId) {
-    journeysStore.ensureBgmTrack(journeyId);
+    JourneysPersistence.loadBgmTrack(journeyId);
   },
 
   resetUpdateState() {
@@ -49,3 +54,30 @@ export const JourneyDetailPresenter = {
     };
   },
 };
+
+const journeyDetailPresenterProps = {
+  onInit: () => JourneyDetailPresenter.init(),
+  onReload: () => JourneyDetailPresenter.reload(),
+  onUpdateJourney: (input) => JourneyDetailPresenter.onUpdateJourney(input),
+  onEnsureBgmTrack: (journeyId) => JourneyDetailPresenter.ensureBgmTrack(journeyId),
+  onPlayBgm: (previewUrl, volume) =>
+    JourneyPlaybackPersistence.playBgm(previewUrl, volume),
+  onPauseBgm: () => JourneyPlaybackPersistence.pauseBgm(),
+  onStopBgm: () => JourneyPlaybackPersistence.stopBgm(),
+  onResetUpdateState: () => JourneyDetailPresenter.resetUpdateState(),
+};
+
+function JourneyDetailPresenterView() {
+  const props = {
+    loadStatus: JourneyDetailPresenter.getLoadStatus(),
+    errorMessage: JourneyDetailPresenter.getErrorMessage(),
+    updateStatus: JourneyDetailPresenter.getUpdateStatus(),
+    updateErrorMessage: JourneyDetailPresenter.getUpdateErrorMessage(),
+    getJourneyById: (journeyId) => JourneyDetailPresenter.getJourneyById(journeyId),
+    ...journeyDetailPresenterProps,
+  };
+
+  return <JourneyDetailScreen {...props} />;
+}
+
+export default observer(JourneyDetailPresenterView);

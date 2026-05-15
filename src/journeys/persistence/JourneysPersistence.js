@@ -1,5 +1,5 @@
 /**
- * JourneysService — persistence/data source for Journeys list page.
+ * JourneysPersistence — persistence/data source for Journeys list page.
  * Uses Firebase as the single source of truth.
  */
 
@@ -17,7 +17,9 @@ import {
 } from 'firebase/firestore';
 import { getDownloadURL, ref } from 'firebase/storage';
 import { auth, db, storage } from '../../shared/api/firebaseClient';
-import { BgmRecommendationService } from './BgmRecommendationService';
+import { BgmRecommendationService } from './BgmRecommendationPersistence';
+import { journeysStore } from '../model/JourneysStore';
+import { ProfilePersistence } from '../../profile/persistence/ProfilePersistence';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1507608616759-54f48f0af0ee?w=1200&h=700&fit=crop';
@@ -361,7 +363,79 @@ async function uploadJourneyPhotos(localPhotoUris, uid) {
   return uploadedUrls;
 }
 
-export const JourneysService = {
+export const JourneysPersistence = {
+  init() {
+    if (journeysStore.loadStatus === 'idle') {
+      this.loadJourneys();
+    }
+  },
+
+  retry() {
+    this.loadJourneys();
+  },
+
+  async loadJourneys() {
+    journeysStore.setLoadStarted();
+    try {
+      const data = await this.fetchJourneys();
+      journeysStore.setJourneysLoaded(data);
+    } catch (e) {
+      journeysStore.setLoadError(e.message || 'Failed to load journeys');
+    }
+  },
+
+  async saveNewJourney(input) {
+    journeysStore.setCreateStarted();
+    try {
+      const created = await this.createJourney(input);
+      await ProfilePersistence.awardJourneyCreatedXp();
+      if (Array.isArray(created?.photoMemories) && created.photoMemories.length >= 3) {
+        await ProfilePersistence.awardJourneyPhotoMilestoneXp();
+      }
+      journeysStore.addJourney(created);
+    } catch (e) {
+      journeysStore.setCreateError(e.message || 'Failed to create journey');
+    }
+  },
+
+  async saveJourneyUpdate(input) {
+    journeysStore.setUpdateStarted();
+    try {
+      const updated = await this.updateJourney(input);
+      await ProfilePersistence.awardJourneyEditedXp();
+      if (Array.isArray(updated?.photoMemories) && updated.photoMemories.length >= 3) {
+        await ProfilePersistence.awardJourneyPhotoMilestoneXp();
+      }
+      journeysStore.replaceJourney(updated);
+    } catch (e) {
+      journeysStore.setUpdateError(e.message || 'Failed to update journey');
+    }
+  },
+
+  async loadBgmTrack(journeyId) {
+    const targetId = String(journeyId || '').trim();
+    if (!targetId || journeysStore.bgmMatchInFlight[targetId]) return;
+
+    const target = journeysStore.journeys.find((item) => String(item.id) === targetId);
+    if (!target || target?.bgmTrack?.previewUrl) return;
+
+    journeysStore.setBgmMatchInFlight(targetId, true);
+
+    try {
+      const updated = await this.ensureBgmTrack(target);
+      if (updated) {
+        if (updated?.bgmTrack?.previewUrl && !target?.bgmTrack?.previewUrl) {
+          await ProfilePersistence.awardJourneyBgmMatchedXp();
+        }
+        journeysStore.replaceJourney(updated);
+      }
+    } catch (e) {
+      console.warn('BGM ensure failed:', e?.message || e);
+    } finally {
+      journeysStore.setBgmMatchInFlight(targetId, false);
+    }
+  },
+
   async fetchJourneys() {
     const resolvedUid = await ensureUid();
     const snap = await getDocs(

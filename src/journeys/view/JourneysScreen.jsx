@@ -8,12 +8,10 @@ import {
   Alert,
   Image,
 } from 'react-native';
-import { observer } from 'mobx-react-lite';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
-import { JourneysPresenter } from '../presenter/JourneysPresenter';
 import { JourneyCard } from './JourneyCard';
 import { AddJourneyModal } from './AddJourneyModal';
 
@@ -50,38 +48,42 @@ function resolveImageMediaTypes() {
   return ['images'];
 }
 
-export const JourneysScreen = observer(function JourneysScreen() {
+export function JourneysScreen({
+  loadStatus,
+  errorMessage,
+  createStatus,
+  createErrorMessage,
+  journeys,
+  onInit,
+  onReload,
+  onCreateJourney,
+  onResetCreateState,
+}) {
   const router = useRouter();
   const [isAddModalVisible, setAddModalVisible] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
-    JourneysPresenter.init();
-  }, []);
-
-  const loadStatus = JourneysPresenter.getLoadStatus();
-  const errorMessage = JourneysPresenter.getErrorMessage();
-  const createStatus = JourneysPresenter.getCreateStatus();
-  const createErrorMessage = JourneysPresenter.getCreateErrorMessage();
-  const journeys = JourneysPresenter.getJourneys();
+    onInit();
+  }, [onInit]);
 
   useEffect(() => {
     if (createStatus === 'success') {
       setAddModalVisible(false);
       setForm(EMPTY_FORM);
-      JourneysPresenter.resetCreateState();
+      onResetCreateState();
     }
-  }, [createStatus]);
+  }, [createStatus, onResetCreateState]);
 
   const openAddModal = () => {
-    JourneysPresenter.resetCreateState();
+    onResetCreateState();
     setForm(EMPTY_FORM);
     setAddModalVisible(true);
   };
 
   const closeAddModal = () => {
     if (createStatus === 'loading') return;
-    JourneysPresenter.resetCreateState();
+    onResetCreateState();
     setAddModalVisible(false);
   };
 
@@ -137,7 +139,7 @@ export const JourneysScreen = observer(function JourneysScreen() {
   };
 
   const submitNewJourney = () => {
-    JourneysPresenter.onCreateJourney(form);
+    onCreateJourney(form);
   };
 
   return (
@@ -150,7 +152,7 @@ export const JourneysScreen = observer(function JourneysScreen() {
       <StatusOverlay
         status={loadStatus}
         errorMessage={errorMessage}
-        onRetry={() => JourneysPresenter.reload()}
+        onRetry={onReload}
       >
         <FlatList
           data={journeys}
@@ -192,7 +194,7 @@ export const JourneysScreen = observer(function JourneysScreen() {
       />
     </View>
   );
-});
+}
 
 const styles = StyleSheet.create({
   screen: {

@@ -1,3 +1,3 @@
-import HubScreen from '../hub/view/HubScreen';
+import HubPresenter from '../hub/presenter/hubPresenter';
 
-export default HubScreen;
+export default HubPresenter;

@@ -1,20 +1,24 @@
+import React from 'react';
+import { observer } from 'mobx-react-lite';
 import { discoverStore } from '../model/DiscoverStore';
+import { DiscoverPersistence } from '../persistence/DiscoverPersistence';
+import { DiscoverScreen } from '../view/DiscoverScreen';
 
-export const DiscoverPresenter = {
+const DiscoverPresenter = {
   init() {
-    discoverStore.init();
+    DiscoverPersistence.init();
   },
 
   reload() {
-    discoverStore.loadAll();
+    DiscoverPersistence.loadAll();
   },
 
   onToggleWishlist(place) {
-    discoverStore.setWishlistLiked(place, !place.isInWishlist);
+    DiscoverPersistence.updateWishlistLiked(place, !place.isInWishlist);
   },
 
   onUnlikePlace(place) {
-    discoverStore.setWishlistLiked(place, false);
+    DiscoverPersistence.updateWishlistLiked(place, false);
   },
 
   getLoadStatus() {
@@ -38,7 +42,7 @@ export const DiscoverPresenter = {
   },
 
   onPlacePress(place) {
-    discoverStore.openPlaceDetail(place);
+    DiscoverPersistence.openPlaceDetail(place);
   },
 
   onCloseDetail() {
@@ -57,3 +61,30 @@ export const DiscoverPresenter = {
     return discoverStore.detailStatus;
   },
 };
+
+const discoverPresenterProps = {
+  onInit: () => DiscoverPresenter.init(),
+  onReload: () => DiscoverPresenter.reload(),
+  onToggleWishlist: (place) => DiscoverPresenter.onToggleWishlist(place),
+  onUnlikePlace: (place) => DiscoverPresenter.onUnlikePlace(place),
+  onPlacePress: (place) => DiscoverPresenter.onPlacePress(place),
+  onCloseDetail: () => DiscoverPresenter.onCloseDetail(),
+};
+
+function DiscoverPresenterView() {
+  const props = {
+    loadStatus: DiscoverPresenter.getLoadStatus(),
+    errorMessage: DiscoverPresenter.getErrorMessage(),
+    topPicks: DiscoverPresenter.getTopPicks(),
+    communityInsights: DiscoverPresenter.getCommunityInsights(),
+    wishToggleStatus: DiscoverPresenter.getWishToggleStatus(),
+    selectedPlace: DiscoverPresenter.getSelectedPlace(),
+    placeDetail: DiscoverPresenter.getPlaceDetail(),
+    detailStatus: DiscoverPresenter.getDetailStatus(),
+    ...discoverPresenterProps,
+  };
+
+  return <DiscoverScreen {...props} />;
+}
+
+export default observer(DiscoverPresenterView);

@@ -1,6 +1,4 @@
-import * as ImagePicker from 'expo-image-picker';
-import { makeAutoObservable, runInAction } from 'mobx';
-import { ProfileService } from './ProfileService';
+import { makeAutoObservable } from 'mobx';
 import {
   computeProgress,
   isDailyAwardSatisfied,
@@ -204,86 +202,43 @@ class ProfileStoreClass {
   }
 
   init() {
-    if (this.loadStatus === 'idle') {
-      this.loadAll();
-    }
-    journeysStore.init();
+    if (this.loadStatus === 'idle') this.loadStatus = 'loading';
   }
 
-  async loadAll() {
+  setLoadStarted() {
     this.loadStatus = 'loading';
     this.errorMessage = null;
-
-    try {
-      const [profile, wishlist, preferences] = await Promise.all([
-        ProfileService.fetchProfile(),
-        ProfileService.fetchWishlist(),
-        ProfileService.fetchPreferences(),
-      ]);
-      const signinAward = isDailyAwardSatisfied(
-        profile?.xpMeta,
-        XP_EVENT_KEYS.DAILY_SIGNIN,
-      )
-        ? { isAwarded: false }
-        : await ProfileService.awardDailySigninXp();
-      const latestProfile = signinAward?.isAwarded
-        ? await ProfileService.fetchProfile()
-        : profile;
-
-      runInAction(() => {
-        this.profile = latestProfile;
-        this.wishlist = wishlist;
-        this.preferences = preferences;
-        this.loadStatus = 'success';
-      });
-    } catch (e) {
-      runInAction(() => {
-        this.loadStatus = 'error';
-        this.errorMessage = e.message ?? 'Failed to load profile';
-      });
-    }
   }
 
-  /** Re-fetch wishlist only (e.g. after Discover tab updates Firestore). */
-  async refreshWishlist() {
-    try {
-      const wishlist = await ProfileService.fetchWishlist();
-      runInAction(() => {
-        this.wishlist = wishlist;
-      });
-    } catch {
-      /* keep existing wishlist */
-    }
+  setProfileData(profile, wishlist, preferences) {
+    this.profile = profile;
+    this.wishlist = wishlist;
+    this.preferences = preferences;
+    this.loadStatus = 'success';
   }
 
-  async refreshProfile() {
-    try {
-      const profile = await ProfileService.fetchProfile();
-      runInAction(() => {
-        this.profile = profile;
-      });
-    } catch {
-      /* keep existing profile */
-    }
+  setLoadError(message) {
+    this.loadStatus = 'error';
+    this.errorMessage = message;
   }
 
-  async openWishlistPlaceDetail(item) {
-    runInAction(() => {
-      this.wishlistDetailPlace = {
-        id: item.id,
-        name: item.name,
-        imageUrl: item.imageUrl,
-        country: '',
-        whyVisit: null,
-      };
-      this.wishlistPlaceDetail = null;
-      this.wishlistDetailStatus = 'loading';
-    });
-    const detail = await ProfileService.fetchPlaceDetail(item.id, item.name);
-    runInAction(() => {
-      this.wishlistPlaceDetail = detail;
-      this.wishlistDetailStatus = detail ? 'success' : 'error';
-    });
+  setWishlist(wishlist) {
+    this.wishlist = wishlist;
+  }
+
+  setProfile(profile) {
+    this.profile = profile;
+  }
+
+  setWishlistDetailLoading(place) {
+    this.wishlistDetailPlace = place;
+    this.wishlistPlaceDetail = null;
+    this.wishlistDetailStatus = 'loading';
+  }
+
+  setWishlistPlaceDetail(detail) {
+    this.wishlistPlaceDetail = detail;
+    this.wishlistDetailStatus = detail ? 'success' : 'error';
   }
 
   setBudgetInputDraft(value) {
@@ -304,86 +259,52 @@ class ProfileStoreClass {
     this.taskModalVisible = false;
   }
 
-  async updatePreferences(newPrefs) {
-    try {
-      await ProfileService.savePreferences(newPrefs);
-      if (Object.prototype.hasOwnProperty.call(newPrefs, 'budgetPerDay')) {
-        await ProfileService.awardBudgetSavedXp();
-      }
-      const refreshedProfile = await ProfileService.fetchProfile();
-      runInAction(() => {
-        this.preferences = { ...this.preferences, ...newPrefs };
-        this.profile = refreshedProfile;
-        if ('budgetPerDay' in newPrefs) {
-          this.budgetInputDraft = null;
-        }
-      });
-      return true;
-    } catch (e) {
-      runInAction(() => {
-        this.errorMessage = e.message ?? 'Failed to save preferences';
-      });
-      return false;
+  setPreferencesSaved(newPrefs, refreshedProfile) {
+    this.preferences = { ...this.preferences, ...newPrefs };
+    this.profile = refreshedProfile;
+    if ('budgetPerDay' in newPrefs) {
+      this.budgetInputDraft = null;
     }
   }
 
-  async updateBudgetPerDay(budgetPerDay) {
+  setError(message) {
+    this.errorMessage = message;
+  }
+
+  updateBudgetPerDayValue(budgetPerDay) {
     if (!this.preferences) return false;
     const nextBudget = Number(budgetPerDay);
     if (!Number.isFinite(nextBudget) || nextBudget <= 0) return false;
-
-    return this.updatePreferences({ budgetPerDay: Math.round(nextBudget) });
+    return { budgetPerDay: Math.round(nextBudget) };
   }
 
-  async pickAndUploadAvatar() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.7,
-      aspect: [1, 1],
-    });
-    if (result.canceled || !result.assets?.[0]?.uri) return;
-    await this.uploadAvatar(result.assets[0].uri);
-  }
-
-  async uploadAvatar(localUri) {
+  setAvatarUploadStarted() {
     this.avatarUploadStatus = 'loading';
     this.errorMessage = null;
-    try {
-      const nextProfile = await ProfileService.uploadAvatar(localUri);
-      runInAction(() => {
-        this.profile = nextProfile;
-        this.avatarUploadStatus = 'success';
-      });
-    } catch (e) {
-      runInAction(() => {
-        this.avatarUploadStatus = 'error';
-        this.errorMessage = e.message ?? 'Failed to upload avatar';
-      });
-    }
   }
 
-  async exportData() {
-    this.exportStatus = 'loading';
+  setAvatarUploadSuccess(nextProfile) {
+    this.profile = nextProfile;
+    this.avatarUploadStatus = 'success';
+  }
 
-    try {
-      await ProfileService.exportUserData();
-      const [_, refreshedProfile] = await Promise.all([
-        ProfileService.awardExportXp(),
-        ProfileService.fetchProfile(),
-      ]);
-      runInAction(() => {
-        this.exportStatus = 'success';
-        this.profile = refreshedProfile;
-      });
-    } catch (e) {
-      runInAction(() => {
-        this.exportStatus = 'error';
-        this.errorMessage = e.message ?? 'Export failed';
-      });
-    }
+  setAvatarUploadError(message) {
+    this.avatarUploadStatus = 'error';
+    this.errorMessage = message;
+  }
+
+  setExportStarted() {
+    this.exportStatus = 'loading';
+  }
+
+  setExportSuccess(refreshedProfile) {
+    this.exportStatus = 'success';
+    this.profile = refreshedProfile;
+  }
+
+  setExportError(message) {
+    this.exportStatus = 'error';
+    this.errorMessage = message;
   }
 }
 

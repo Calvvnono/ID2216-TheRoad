@@ -1,3 +1,3 @@
-import { DiscoverScreen } from '../discover/view/DiscoverScreen';
+import DiscoverPresenter from '../discover/presenter/DiscoverPresenter';
 
-export default DiscoverScreen;
+export default DiscoverPresenter;

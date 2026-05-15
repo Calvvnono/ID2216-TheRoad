@@ -12,15 +12,12 @@ import {
   FlatList,
   useWindowDimensions,
 } from 'react-native';
-import { observer } from 'mobx-react-lite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
-import { JourneyDetailPresenter } from '../presenter/JourneyDetailPresenter';
-import { journeyPlaybackStore } from '../model/JourneyPlaybackStore';
 import { AddJourneyModal } from './AddJourneyModal';
 
 const HERO_STORY_INTERVAL_MS = 1400;
@@ -105,7 +102,21 @@ function DailyExpenseBars({ values }) {
   );
 }
 
-export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
+export function JourneyDetailScreen({
+  loadStatus,
+  errorMessage,
+  updateStatus,
+  updateErrorMessage,
+  getJourneyById,
+  onInit,
+  onReload,
+  onUpdateJourney,
+  onEnsureBgmTrack,
+  onPlayBgm,
+  onPauseBgm,
+  onStopBgm,
+  onResetUpdateState,
+}) {
   const router = useRouter();
   const entryAnim = useRef(new Animated.Value(0)).current;
   const previewListRef = useRef(null);
@@ -131,8 +142,8 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   const journeyId = typeof journeyIdParam === 'string' ? journeyIdParam : '';
 
   useEffect(() => {
-    JourneyDetailPresenter.init();
-  }, []);
+    onInit();
+  }, [onInit]);
 
   useEffect(() => {
     entryAnim.setValue(0);
@@ -148,9 +159,9 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     setHeroStoryPlaying(false);
     setPreviewVisible(false);
     setHeroFrameIndex(0);
-    journeyPlaybackStore.stopBgm();
+    onStopBgm();
     router.replace('/journeys');
-  }, [router]);
+  }, [router, onStopBgm]);
 
   const detailAnimatedStyle = {
     opacity: entryAnim,
@@ -164,11 +175,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     ],
   };
 
-  const loadStatus = JourneyDetailPresenter.getLoadStatus();
-  const errorMessage = JourneyDetailPresenter.getErrorMessage();
-  const updateStatus = JourneyDetailPresenter.getUpdateStatus();
-  const updateErrorMessage = JourneyDetailPresenter.getUpdateErrorMessage();
-  const journey = JourneyDetailPresenter.getJourneyById(journeyId);
+  const journey = getJourneyById(journeyId);
   const visitedLocations = journey?.visitedLocations || [];
   const dailyExpenses = journey?.dailyExpenses || [];
   const photoMemories = journey?.photoMemories || [];
@@ -231,8 +238,8 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     setPreviewIndex(0);
     setEditModalVisible(false);
     setHasRequestedBgm(false);
-    JourneyDetailPresenter.resetUpdateState();
-  }, [journey?.id, heroStoryFrames.length]);
+    onResetUpdateState();
+  }, [journey?.id, heroStoryFrames.length, onResetUpdateState]);
 
   useEffect(() => {
     if (!isHeroStoryPlaying) {
@@ -243,9 +250,9 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
   useEffect(() => {
     if (updateStatus === 'success') {
       setEditModalVisible(false);
-      JourneyDetailPresenter.resetUpdateState();
+      onResetUpdateState();
     }
-  }, [updateStatus]);
+  }, [updateStatus, onResetUpdateState]);
 
   useEffect(() => {
     if (!isHeroStoryPlaying || !isStoryModalVisible || heroStoryFrames.length < 2) {
@@ -266,18 +273,18 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
       return;
     }
 
-    JourneyDetailPresenter.ensureBgmTrack(journey.id);
+    onEnsureBgmTrack(journey.id);
     setHasRequestedBgm(true);
-  }, [shouldPlayBgm, bgmPreviewUrl, hasRequestedBgm, journey?.id]);
+  }, [shouldPlayBgm, bgmPreviewUrl, hasRequestedBgm, journey?.id, onEnsureBgmTrack]);
 
   useEffect(() => {
     if (!shouldPlayBgm) {
-      journeyPlaybackStore.pauseBgm();
+      onPauseBgm();
       return;
     }
     if (!bgmPreviewUrl) return;
-    journeyPlaybackStore.playBgm(bgmPreviewUrl, BGM_VOLUME);
-  }, [shouldPlayBgm, bgmPreviewUrl]);
+    onPlayBgm(bgmPreviewUrl, BGM_VOLUME);
+  }, [shouldPlayBgm, bgmPreviewUrl, onPauseBgm, onPlayBgm]);
 
   useEffect(() => {
     if (isFocused) return;
@@ -285,16 +292,16 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     setHeroStoryPlaying(false);
     setPreviewVisible(false);
     setHeroFrameIndex(0);
-    journeyPlaybackStore.stopBgm();
-  }, [isFocused]);
+    onStopBgm();
+  }, [isFocused, onStopBgm]);
 
   useEffect(() => {
-    journeyPlaybackStore.stopBgm();
-  }, [journey?.id]);
+    onStopBgm();
+  }, [journey?.id, onStopBgm]);
 
   useEffect(() => () => {
-    journeyPlaybackStore.stopBgm();
-  }, []);
+    onStopBgm();
+  }, [onStopBgm]);
 
   const openStoryModal = () => {
     if (!canPlayHeroStory) return;
@@ -307,7 +314,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
     setStoryModalVisible(false);
     setHeroStoryPlaying(false);
     setHeroFrameIndex(0);
-    journeyPlaybackStore.pauseBgm();
+    onPauseBgm();
   };
 
   const toggleHeroStoryPlayback = () => {
@@ -327,14 +334,14 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
 
   const openEditModal = () => {
     if (!journey) return;
-    JourneyDetailPresenter.resetUpdateState();
+    onResetUpdateState();
     setEditForm(createEditForm(journey));
     setEditModalVisible(true);
   };
 
   const closeEditModal = () => {
     if (updateStatus === 'loading') return;
-    JourneyDetailPresenter.resetUpdateState();
+    onResetUpdateState();
     setEditModalVisible(false);
   };
 
@@ -395,7 +402,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
 
   const submitJourneyUpdate = () => {
     if (!journey) return;
-    JourneyDetailPresenter.onUpdateJourney({
+    onUpdateJourney({
       id: journey.id,
       ...editForm,
     });
@@ -421,7 +428,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
       <StatusOverlay
         status={loadStatus}
         errorMessage={errorMessage}
-        onRetry={() => JourneyDetailPresenter.reload()}
+        onRetry={onReload}
       >
         {journey ? (
           <Animated.View style={[styles.detailContainer, detailAnimatedStyle]}>
@@ -627,7 +634,7 @@ export const JourneyDetailScreen = observer(function JourneyDetailScreen() {
       />
     </View>
   );
-});
+}
 
 const styles = StyleSheet.create({
   screen: {

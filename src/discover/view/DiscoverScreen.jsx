@@ -1,26 +1,30 @@
 import React, { useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { observer } from 'mobx-react-lite';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
-import { DiscoverPresenter } from '../presenter/DiscoverPresenter';
 import { FeaturedRecommendationCarousel } from './FeaturedRecommendationCarousel';
 import { CommunityInsightsSection } from './CommunityInsightsSection';
 import { PlaceDetailModal } from './PlaceDetailModal';
 
-export const DiscoverScreen = observer(function DiscoverScreen() {
+export function DiscoverScreen({
+  loadStatus,
+  errorMessage,
+  topPicks,
+  communityInsights,
+  wishToggleStatus,
+  selectedPlace,
+  placeDetail,
+  detailStatus,
+  onInit,
+  onReload,
+  onToggleWishlist,
+  onUnlikePlace,
+  onPlacePress,
+  onCloseDetail,
+}) {
   useEffect(() => {
-    DiscoverPresenter.init();
-  }, []);
-
-  const loadStatus = DiscoverPresenter.getLoadStatus();
-  const errorMessage = DiscoverPresenter.getErrorMessage();
-  const topPicks = DiscoverPresenter.getTopPicks();
-  const communityInsights = DiscoverPresenter.getCommunityInsights();
-  const wishToggleStatus = DiscoverPresenter.getWishToggleStatus();
-  const selectedPlace = DiscoverPresenter.getSelectedPlace();
-  const placeDetail = DiscoverPresenter.getPlaceDetail();
-  const detailStatus = DiscoverPresenter.getDetailStatus();
+    onInit();
+  }, [onInit]);
 
   return (
     <View style={styles.screen}>
@@ -33,7 +37,7 @@ export const DiscoverScreen = observer(function DiscoverScreen() {
       <StatusOverlay
         status={loadStatus}
         errorMessage={errorMessage}
-        onRetry={() => DiscoverPresenter.reload()}
+        onRetry={onReload}
       >
         <ScrollView
           style={styles.scroll}
@@ -43,14 +47,14 @@ export const DiscoverScreen = observer(function DiscoverScreen() {
         >
           <FeaturedRecommendationCarousel
             places={topPicks}
-            onCardPress={(place) => DiscoverPresenter.onPlacePress(place)}
-            onLike={(place) => DiscoverPresenter.onToggleWishlist(place)}
-            onUnlike={(place) => DiscoverPresenter.onUnlikePlace(place)}
+            onCardPress={onPlacePress}
+            onLike={onToggleWishlist}
+            onUnlike={onUnlikePlace}
             toggleStatus={wishToggleStatus}
           />
           <CommunityInsightsSection
             items={communityInsights}
-            onPress={(place) => DiscoverPresenter.onPlacePress(place)}
+            onPress={onPlacePress}
           />
         </ScrollView>
       </StatusOverlay>
@@ -59,11 +63,11 @@ export const DiscoverScreen = observer(function DiscoverScreen() {
         place={selectedPlace}
         detail={placeDetail}
         detailStatus={detailStatus}
-        onClose={() => DiscoverPresenter.onCloseDetail()}
+        onClose={onCloseDetail}
       />
     </View>
   );
-});
+}
 
 const styles = StyleSheet.create({
   screen: {
