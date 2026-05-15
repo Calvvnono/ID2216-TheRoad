@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, ScrollView, StyleSheet, Image } from 'react-native';
+import { View, ScrollView, StyleSheet, Image, TouchableOpacity, Text } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../shared/theme/colors';
@@ -91,6 +91,14 @@ export const ProfileScreen = observer(function ProfileScreen() {
               }
             />
           ) : null}
+
+          <TouchableOpacity
+            style={styles.signOutBtn}
+            onPress={() => ProfilePresenter.onSignOut()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
         </ScrollView>
       </StatusOverlay>
     </View>
@@ -117,5 +125,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: CONTENT_BELOW_LOGO,
     paddingBottom: 32,
+  },
+  signOutBtn: {
+    marginTop: 24,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.borderDefault,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  signOutText: {
+    color: Colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
