@@ -1,3 +1,3 @@
-import { JourneysScreen } from '../journeys/view/JourneysScreen';
+import JourneysPresenter from '../journeys/presenter/JourneysPresenter';
 
-export default JourneysScreen;
+export default JourneysPresenter;
