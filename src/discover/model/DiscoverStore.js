@@ -9,21 +9,13 @@ class DiscoverStoreClass {
 
   errorMessage = null;
 
-  wishToggleStatus = 'idle';
+  wishTogglingMap = {};
 
   selectedPlace = null;
 
   placeDetail = null;
 
   detailStatus = 'idle';
-
-  get topPicksViewModel() {
-    return this.topPicks.map((place) => ({
-      ...place,
-      heartIconName: place.isInWishlist ? 'heart' : 'heart-outline',
-      heartActive: !!place.isInWishlist,
-    }));
-  }
 
   constructor() {
     makeAutoObservable(this);
@@ -45,8 +37,8 @@ class DiscoverStoreClass {
     this.errorMessage = message;
   }
 
-  setWishToggleStarted() {
-    this.wishToggleStatus = 'loading';
+  setWishToggleStarted(placeId) {
+    this.wishTogglingMap = { ...this.wishTogglingMap, [placeId]: true };
     this.errorMessage = null;
   }
 
@@ -54,11 +46,15 @@ class DiscoverStoreClass {
     this.topPicks = this.topPicks.map((p) =>
       p.id === placeId ? { ...p, isInWishlist: liked } : p,
     );
-    this.wishToggleStatus = 'idle';
+    const next = { ...this.wishTogglingMap };
+    delete next[placeId];
+    this.wishTogglingMap = next;
   }
 
-  setWishToggleError(message) {
-    this.wishToggleStatus = 'idle';
+  setWishToggleError(placeId, message) {
+    const next = { ...this.wishTogglingMap };
+    delete next[placeId];
+    this.wishTogglingMap = next;
     this.errorMessage = message;
   }
 

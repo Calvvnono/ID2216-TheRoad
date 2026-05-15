@@ -24,7 +24,9 @@ export function ProfileScreen({
   preferences,
   interestTags,
   avatarUploadStatus,
-  budgetInputValue,
+  totalSpent,
+  avgDailyBudget,
+  journeyCount,
   wishlistDetailPlace,
   wishlistPlaceDetail,
   wishlistDetailStatus,
@@ -32,9 +34,7 @@ export function ProfileScreen({
   taskList,
   onInit,
   onReload,
-  onUpdateBudgetPerDay,
   onPickAvatar,
-  onBudgetInputChange,
   onWishlistItemPress,
   onCloseWishlistDetail,
   onOpenTaskModal,
@@ -94,15 +94,13 @@ export function ProfileScreen({
             onClose={onCloseWishlistDetail}
           />
 
-          {preferences ? (
-            <PreferencePanel
-              preferences={preferences}
-              interestTags={interestTags}
-              budgetInput={budgetInputValue}
-              onBudgetInputChange={onBudgetInputChange}
-              onBudgetSave={() => onUpdateBudgetPerDay(budgetInputValue)}
-            />
-          ) : null}
+          <PreferencePanel
+            preferences={preferences}
+            interestTags={interestTags}
+            totalSpent={totalSpent}
+            avgDailyBudget={avgDailyBudget}
+            journeyCount={journeyCount}
+          />
 
           <TouchableOpacity
             style={styles.signOutBtn}

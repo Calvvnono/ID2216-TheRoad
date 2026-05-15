@@ -16,13 +16,33 @@ import { db } from '../../shared/api/firebaseClient';
 const COMMUNITY_SAMPLE_SIZE = 120;
 let hasStartedDiscoverReaction = false;
 
+function parseDateOnly(value) {
+  if (!value) return null;
+  const d = new Date(`${value}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function journeyDurationDays(j) {
+  const start = parseDateOnly(j.startDate);
+  const end = parseDateOnly(j.endDate);
+  if (!start || !end) return 1;
+  return Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
+}
+
+function computeAvgDailyBudget(journeys) {
+  if (!Array.isArray(journeys) || journeys.length === 0) return 200;
+  const totalSpent = journeys.reduce((sum, j) => sum + (Number(j.spent) || 0), 0);
+  const totalDays = journeys.reduce((sum, j) => sum + journeyDurationDays(j), 0);
+  return totalDays > 0 ? Math.round(totalSpent / totalDays) : 200;
+}
+
 function mapApiPlace(place, keyword) {
   return {
     id: place.id,
     name: place.displayName?.text ?? 'Unknown',
     country: place.shortFormattedAddress ?? '',
     imageUrl: place.photos?.[0] ? placesClient.photoUrl(place.photos[0].name) : null,
-    reason: place.editorialSummary?.text ?? `Top ${keyword} destination`,
+    reason: place.editorialSummary?.text ?? `Popular ${keyword} destination`,
     keywords: [keyword],
   };
 }
@@ -50,23 +70,61 @@ function mapDetail(raw) {
 }
 
 function buildOverlayLine(budget, forYouKeywords, place) {
-  const love =
-    forYouKeywords.slice(0, 2).join(' & ') || 'culture & adventure';
-  return `$${budget}/day · ${love} · ${place.reason}`;
+  const love = forYouKeywords.slice(0, 2).join(' & ') || 'culture & adventure';
+  const budgetLabel = budget > 0 ? `$${budget}/day · ` : '';
+  return `${budgetLabel}${love} · ${place.reason}`;
 }
 
-async function searchByKeywords(keywords, offset, seen) {
-  if (!Array.isArray(keywords) || keywords.length === 0) return [];
+async function searchPlacesByQuery(keyword, textQuery, seen) {
+  try {
+    const places = await placesClient.searchByQuery(textQuery);
+    return places
+      .map((p) => mapApiPlace(p, keyword))
+      .filter((p) => {
+        if (seen.has(p.id) || !p.imageUrl) return false;
+        seen.add(p.id);
+        return true;
+      });
+  } catch {
+    return [];
+  }
+}
+
+async function searchByKeywords(keywordQueryPairs, seen) {
+  if (!Array.isArray(keywordQueryPairs) || keywordQueryPairs.length === 0) return [];
   const results = await Promise.all(
-    keywords.map((kw, i) => placesClient.searchText(kw, i + offset)),
+    keywordQueryPairs.map(({ keyword, query }) => searchPlacesByQuery(keyword, query, seen)),
   );
-  return results
-    .flatMap((places, i) => places.map((p) => mapApiPlace(p, keywords[i])))
-    .filter((p) => {
-      if (seen.has(p.id) || !p.imageUrl) return false;
-      seen.add(p.id);
-      return true;
+  return results.flat();
+}
+
+function buildPicksQueryPairs(locations, styleTags, fallbacks) {
+  if (locations.length > 0 && styleTags.length > 0) {
+    const pairs = [];
+    locations.slice(0, 2).forEach((loc) => {
+      pairs.push({ keyword: loc, query: `${styleTags[0]} attractions in ${loc}` });
     });
+    styleTags.forEach((tag) => {
+      pairs.push({ keyword: tag, query: `best ${tag} travel destinations` });
+    });
+    return pairs.slice(0, 4);
+  }
+  if (styleTags.length > 0) {
+    return styleTags.map((tag) => ({
+      keyword: tag,
+      query: `best ${tag} travel destinations`,
+    }));
+  }
+  if (locations.length > 0) {
+    return locations.map((loc) => ({
+      keyword: loc,
+      query: `top tourist attractions in ${loc}`,
+    }));
+  }
+  return fallbacks.slice(0, 3).map((kw) => ({
+    keyword: kw,
+    query: `top tourist attractions in ${kw}`,
+  }));
 }
 
 export const DiscoverPersistence = {
@@ -87,9 +145,8 @@ export const DiscoverPersistence = {
         if (profileStore.loadStatus !== 'success') return null;
         const journeysStatus = journeysStore.loadStatus;
         if (journeysStatus !== 'success' && journeysStatus !== 'error') return null;
-        const budget = profileStore.preferences?.budgetPerDay ?? 200;
         const forYou = profileStore.forYouKeywords.join('|');
-        return `${budget}|${forYou}`;
+        return forYou || 'default';
       },
       (signature, previousSignature) => {
         if (!signature || signature === previousSignature) return;
@@ -101,11 +158,14 @@ export const DiscoverPersistence = {
   async loadAll() {
     discoverStore.setLoadStarted();
     try {
-      const { topPicks, communityInsights } =
-        await this.fetchDiscoverPage({
-          forYouKeywords: profileStore.forYouKeywords,
-          budget: profileStore.preferences?.budgetPerDay ?? 200,
-        });
+      const avgBudget = computeAvgDailyBudget(journeysStore.journeys);
+
+      const { topPicks, communityInsights } = await this.fetchDiscoverPage({
+        forYouKeywords: profileStore.forYouKeywords,
+        budget: avgBudget,
+        userJourneys: journeysStore.journeys,
+      });
+
       const discoverAward = isDailyAwardSatisfied(
         profileStore.profile?.xpMeta,
         XP_EVENT_KEYS.DAILY_DISCOVER_BROWSE,
@@ -123,13 +183,13 @@ export const DiscoverPersistence = {
 
   async updateWishlistLiked(place, liked) {
     if (!!place.isInWishlist === liked) return;
-    discoverStore.setWishToggleStarted();
+    discoverStore.setWishToggleStarted(place.id);
     try {
       await this.setWishlistLiked(place, liked);
       discoverStore.setTopPickLiked(place.id, liked);
       ProfilePersistence.refreshWishlist();
     } catch (e) {
-      discoverStore.setWishToggleError(e.message ?? 'Could not update wishlist');
+      discoverStore.setWishToggleError(place.id, e.message ?? 'Could not update wishlist');
     }
   },
 
@@ -145,28 +205,50 @@ export const DiscoverPersistence = {
     discoverStore.setPlaceDetail(detail);
   },
 
-  async fetchDiscoverPage({ forYouKeywords = [], budget = 200 } = {}) {
+  async fetchDiscoverPage({ forYouKeywords = [], budget = 200, userJourneys = [] } = {}) {
     const [wishlist, communitySample] = await Promise.all([
       ProfilePersistence.fetchWishlist(),
       fetchCommunityJourneySample(),
     ]);
     const wishlistIds = new Set(wishlist.map((w) => w.id));
 
-    const excludeSet = new Set(
-      forYouKeywords.map((k) => String(k || '').trim().toLowerCase()).filter(Boolean),
-    );
+    // User's travel style from BGM tags (activity + custom keywords)
+    const userStyleTags = [...new Set(
+      userJourneys.flatMap((j) => [
+        ...(Array.isArray(j.bgmActivityTags) ? j.bgmActivityTags : []),
+        ...(Array.isArray(j.bgmCustomKeywords) ? j.bgmCustomKeywords : []),
+      ]).map((t) => String(t || '').trim().toLowerCase()).filter(Boolean),
+    )].slice(0, 2);
+
+    // User's visited locations (country or destination, deduplicated)
+    const userLocations = userJourneys
+      .map((j) => j.country || j.destination)
+      .filter(Boolean)
+      .filter((v, i, arr) => arr.indexOf(v) === i)
+      .slice(0, 3);
+
+    // Community section: exclude keywords already used in For You picks
+    const picksExcludeSet = new Set([
+      ...userLocations.map((k) => k.toLowerCase()),
+      ...userStyleTags,
+    ]);
     const communityCounts = aggregateCommunityKeywordCounts(communitySample);
-    const communityPicks = pickCommunityKeywordCounts(communityCounts, excludeSet, 3);
+    const communityPicks = pickCommunityKeywordCounts(communityCounts, picksExcludeSet, 3);
     const communityKeywords = communityPicks.map(([token]) => token);
     const communityCountByKeyword = new Map(communityPicks);
 
     const seen = new Set();
-    const rawPicks = (
-      await searchByKeywords(forYouKeywords, 0, seen)
-    ).slice(0, 4);
-    const rawInsights = (
-      await searchByKeywords(communityKeywords, 3, seen)
-    ).slice(0, 4);
+
+    // For You picks — combine style tags and locations into meaningful queries
+    const picksQueryPairs = buildPicksQueryPairs(userLocations, userStyleTags, forYouKeywords);
+    const rawPicks = (await searchByKeywords(picksQueryPairs, seen)).slice(0, 4);
+
+    // Community insights — search real destinations that community travelers visited
+    const communityQueryPairs = communityKeywords.map((kw) => ({
+      keyword: kw,
+      query: `must-visit places in ${kw}`,
+    }));
+    const rawInsights = (await searchByKeywords(communityQueryPairs, seen)).slice(0, 4);
 
     const topPicks = rawPicks.map((p) => ({
       ...p,
@@ -178,9 +260,7 @@ export const DiscoverPersistence = {
       const keyword = p.keywords?.[0] ?? '';
       const count = communityCountByKeyword.get(keyword) ?? 0;
       const peerNote =
-        count >= 2
-          ? `Shared by ${count} travelers`
-          : 'Trending in the community';
+        count >= 2 ? `Visited by ${count} travelers` : 'Trending in the community';
       return {
         ...p,
         badge: keyword,

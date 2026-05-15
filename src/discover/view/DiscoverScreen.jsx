@@ -1,17 +1,21 @@
 import React, { useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Image, ScrollView, StyleSheet } from 'react-native';
 import { Colors } from '../../shared/theme/colors';
 import { StatusOverlay } from '../../shared/ui/StatusOverlay';
 import { FeaturedRecommendationCarousel } from './FeaturedRecommendationCarousel';
 import { CommunityInsightsSection } from './CommunityInsightsSection';
 import { PlaceDetailModal } from './PlaceDetailModal';
 
+const APP_HEADER_LOGO = require('../../shared/assets/logo_pic.png');
+const HEADER_LOGO_TOP = 10;
+const HEADER_LOGO_SIZE = 80;
+const CONTENT_BELOW_LOGO = HEADER_LOGO_TOP + HEADER_LOGO_SIZE + 8;
+
 export function DiscoverScreen({
   loadStatus,
   errorMessage,
   topPicks,
   communityInsights,
-  wishToggleStatus,
   selectedPlace,
   placeDetail,
   detailStatus,
@@ -28,12 +32,7 @@ export function DiscoverScreen({
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          The Road Goes Ever On
-        </Text>
-        <Text style={styles.headerSubtitle}>All the World's a Road</Text>
-      </View>
+      <Image source={APP_HEADER_LOGO} style={styles.floatingLogo} resizeMode="contain" />
       <StatusOverlay
         status={loadStatus}
         errorMessage={errorMessage}
@@ -50,7 +49,6 @@ export function DiscoverScreen({
             onCardPress={onPlacePress}
             onLike={onToggleWishlist}
             onUnlike={onUnlikePlace}
-            toggleStatus={wishToggleStatus}
           />
           <CommunityInsightsSection
             items={communityInsights}
@@ -74,25 +72,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
-    backgroundColor: Colors.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Colors.borderSubtle,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginHorizontal: 20,
-    marginTop: 8,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
+  floatingLogo: {
+    position: 'absolute',
+    top: HEADER_LOGO_TOP,
+    left: 20,
+    width: HEADER_LOGO_SIZE,
+    height: HEADER_LOGO_SIZE,
+    zIndex: 20,
   },
   scroll: {
     flex: 1,
@@ -100,6 +86,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 8,
-    paddingTop: 12,
+    paddingTop: CONTENT_BELOW_LOGO,
   },
 });
